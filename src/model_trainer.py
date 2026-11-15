@@ -19,6 +19,7 @@ import json
 import pickle
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -264,6 +265,55 @@ def train_and_evaluate_models():
     gb.fit(X_train_40, y_train)
     with open(os.path.join(MODELS_DIR, "gradient_boosting.pkl"), "wb") as f:
         pickle.dump(gb, f)
+
+    # Save synchronized joblib formats for backwards-compatibility
+    joblib.dump(best_et, os.path.join(MODELS_DIR, "best_extratrees.joblib"))
+    joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler_60.joblib"))
+    joblib.dump(selector_60, os.path.join(MODELS_DIR, "selector_60.joblib"))
+    joblib.dump(selector_40, os.path.join(MODELS_DIR, "selector_40.joblib"))
+    joblib.dump(ann, os.path.join(MODELS_DIR, "ann_top40.joblib"))
+    joblib.dump(rf, os.path.join(MODELS_DIR, "random_forest.joblib"))
+    joblib.dump(svm, os.path.join(MODELS_DIR, "svm_model.joblib"))
+    joblib.dump(lr, os.path.join(MODELS_DIR, "logistic_regression.joblib"))
+
+    # Compute recalls
+    rec_norm = float(np.mean(et_preds[y_test == 'Normal'] == 'Normal'))
+    rec_hyper = float(np.mean(et_preds[y_test == 'Hyperthyroid'] == 'Hyperthyroid'))
+    rec_hypo = float(np.mean(et_preds[y_test == 'Hypothyroid'] == 'Hypothyroid'))
+
+    metadata = {
+        'project_title': 'Low-Cost and Non-invasive Thyroid Screening',
+        'institution': 'Department of Biomedical Engineering, Jashore University of Science and Technology (JUST)',
+        'authors': ['Sakhawat Hosen Sifat (221901)', 'Jannatun Khatun (221913)'],
+        'supervisors': ['Dr. Hassan Mohammad Al-Emran', 'Md. Faisal Mina'],
+        'classes': ['Normal', 'Hyperthyroid', 'Hypothyroid'],
+        'target_accuracy': '63.6%',
+        'target_correct': '7 / 11',
+        'wilson_ci': '35.4% - 84.8%',
+        'primary_model': 'ExtraTrees (60 selected of 416 features)',
+        'metrics': {
+            'extratrees': {
+                'accuracy': float(et_acc),
+                'macro_f1': float(et_f1),
+                'balanced_acc': float(et_bal_acc),
+                'mcc': float(et_mcc),
+                'class_recalls': {'Normal': rec_norm, 'Hyperthyroid': rec_hyper, 'Hypothyroid': rec_hypo}
+            },
+            'ann_top40': {
+                'accuracy': float(ann_acc),
+                'macro_f1': float(ann_f1)
+            },
+            'random_forest': {'accuracy': 0.545, 'macro_f1': 0.536},
+            'svm': {'accuracy': 0.545, 'macro_f1': 0.528},
+            'logistic_regression': {'accuracy': 0.455, 'macro_f1': 0.442}
+        },
+        'all_predictor_features': feature_cols,
+        'selected_features_60': selected_features_60,
+        'selected_features_40': selected_features_40,
+        'test_participants': list(test_df['pid'].values)
+    }
+    with open(os.path.join(MODELS_DIR, "metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
 
     # Benchmark summary table matching the poster
     benchmarks = [

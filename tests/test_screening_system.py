@@ -178,5 +178,64 @@ class TestModelPerformanceAndPosterMatch(unittest.TestCase):
         self.assertEqual(et_entry["macro_auc"], 0.700)
         self.assertEqual(et_entry["mcc"], 0.475)
 
+
+class TestInteractiveWebUI(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from app import find_patient_sensor_files, normalize_pid
+        cls.find_patient_sensor_files = staticmethod(find_patient_sensor_files)
+        cls.normalize_pid = staticmethod(normalize_pid)
+        cls.app_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app.py")
+
+    def test_patient_folder_resolver_handles_naming_variations(self):
+        # TH030 is named TH30 in Thyroid_Data/27.10.26/TH30/
+        t_files, n_files = self.find_patient_sensor_files("TH030")
+        self.assertGreater(len(t_files), 0, "Failed to resolve TH030 to TH30 folder!")
+        self.assertGreater(len(n_files), 0, "Failed to resolve neck files for TH030!")
+
+        # TH054 standard
+        t54, n54 = self.find_patient_sensor_files("TH054")
+        self.assertGreater(len(t54), 0)
+        self.assertGreater(len(n54), 0)
+
+    def test_streamlit_app_initialization_and_rendering(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(self.app_path)
+        at.run(timeout=15)
+        self.assertEqual(len(at.exception), 0, f"AppTest threw exceptions on load: {[e.value for e in at.exception]}")
+
+    def test_streamlit_all_pages_render_without_pyarrow_errors(self):
+        from streamlit.testing.v1 import AppTest
+        menu_items = [
+            "🩺 Live Thyroid Screening",
+            "📈 Sensor Signal Visualizer",
+            "🔬 Project & Hardware Overview",
+            "📊 Dataset Profile & Cohort",
+            "🏆 Benchmark Model Comparison",
+            "📚 References & Clinical Scope"
+        ]
+        for m in menu_items:
+            at = AppTest.from_file(self.app_path)
+            at.run(timeout=15)
+            r = [r for r in at.radio if "Select Module" in r.proto.label][0]
+            r.set_value(m).run(timeout=15)
+            self.assertEqual(len(at.exception), 0, f"Page [{m}] raised exception: {[e.value for e in at.exception]}")
+
+    def test_live_screening_heldout_patients_interactive(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(self.app_path)
+        at.run(timeout=15)
+
+        p_select = [sb for sb in at.selectbox if "Held-Out" in sb.proto.label][0]
+        # Test TH030 specifically
+        th030_opts = [o for o in p_select.options if "TH030" in o]
+        self.assertTrue(len(th030_opts) > 0)
+        p_select.set_value(th030_opts[0]).run(timeout=10)
+        self.assertEqual(len(at.exception), 0)
+        # Verify screening result badges were generated
+        badges = [m.value for m in at.markdown if "badge-" in m.value]
+        self.assertGreater(len(badges), 0, "No screening badges rendered for TH030!")
+
+
 if __name__ == '__main__':
     unittest.main()

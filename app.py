@@ -13,6 +13,8 @@ import json
 import pickle
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import streamlit as st
@@ -709,7 +711,7 @@ elif menu == "🔬 Project & Hardware Overview":
     with col_h1:
         st.markdown("##### 🔌 Hardware System Architecture")
         if os.path.exists("poster_assets/image1.png"):
-            st.image("poster_assets/image1.png", caption="System Components: ESP32, INMP441 Microphone, MPU6050 IMU, VL53L0X ToF Sensor, OLED, 5V Supply", use_container_width=True)
+            st.image("poster_assets/image1.png", caption="System Components: ESP32, INMP441 Microphone, MPU6050 IMU, VL53L0X ToF Sensor, OLED, 5V Supply", width="stretch")
         st.markdown("""
         - **MPU6050 6-Axis IMU**: Captures 3-axis acceleration and 3-axis angular rates at 100 Hz to detect fine physiological and postural tremor.
         - **VL53L0X ToF Laser Sensor**: Measures optical distance to the anterior-neck surface across 10 reads (surface proximity only, does NOT measure internal thyroid volume).
@@ -720,17 +722,17 @@ elif menu == "🔬 Project & Hardware Overview":
     with col_h2:
         st.markdown("##### ⚡ Schematic Circuit Diagram")
         if os.path.exists("poster_assets/image3.jpeg"):
-            st.image("poster_assets/image3.jpeg", caption="Circuit Wiring Diagram showing ESP32 I2C & I2S Interconnections", use_container_width=True)
+            st.image("poster_assets/image3.jpeg", caption="Circuit Wiring Diagram showing ESP32 I2C & I2S Interconnections", width="stretch")
 
     st.markdown("---")
     st.markdown("##### 🔄 Methodology Workflow")
     if os.path.exists("poster_assets/image4.png"):
-        st.image("poster_assets/image4.png", caption="8-Stage Methodology: Data Acquisition -> Signal Processing -> Feature Dataset -> Model Development -> Model Evaluation -> Screening -> UI -> Final Output", use_container_width=True)
+        st.image("poster_assets/image4.png", caption="8-Stage Methodology: Data Acquisition -> Signal Processing -> Feature Dataset -> Model Development -> Model Evaluation -> Screening -> UI -> Final Output", width="stretch")
 
     st.markdown("---")
     st.markdown("##### 📸 Prototype Deployment & Field Operation")
     if os.path.exists("poster_assets/image5.png"):
-        st.image("poster_assets/image5.png", caption="Field Prototype: Hand Tremor Ring Sensor, OLED Status Messages during Initial, Voice, Tremor, and Neck Reading Phases", use_container_width=True)
+        st.image("poster_assets/image5.png", caption="Field Prototype: Hand Tremor Ring Sensor, OLED Status Messages during Initial, Voice, Tremor, and Neck Reading Phases", width="stretch")
 
 
 # ==========================================================
@@ -754,7 +756,7 @@ elif menu == "📊 Dataset Profile & Cohort":
     st.markdown("<br>", unsafe_allow_html=True)
 
     if os.path.exists("poster_assets/image7.png"):
-        st.image("poster_assets/image7.png", caption="Dataset Profile & Explainable AI Benchmark Summary from Poster Presentation", use_container_width=True)
+        st.image("poster_assets/image7.png", caption="Dataset Profile & Explainable AI Benchmark Summary from Poster Presentation", width="stretch")
 
     st.markdown("---")
 
@@ -817,7 +819,7 @@ elif menu == "🏆 Benchmark Model Comparison":
     st.markdown("Exact held-out evaluation metrics matching the primary v9 analysis presented on the poster.")
 
     if os.path.exists("poster_assets/image6.png"):
-        st.image("poster_assets/image6.png", caption="Primary v9 Held-Out Test Validation Card from Poster Presentation", use_container_width=True)
+        st.image("poster_assets/image6.png", caption="Primary v9 Held-Out Test Validation Card from Poster Presentation", width="stretch")
 
     st.markdown("---")
     st.markdown("### 📊 Comprehensive Model Benchmark Table")
@@ -837,7 +839,7 @@ elif menu == "🏆 Benchmark Model Comparison":
         "Model Type": b_df["type"]
     })
 
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width="stretch", hide_index=True)
 
     st.markdown("---")
 
