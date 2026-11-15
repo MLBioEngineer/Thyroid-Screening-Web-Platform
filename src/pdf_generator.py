@@ -4,6 +4,7 @@ Department of Biomedical Engineering, Jashore University of Science and Technolo
 """
 
 import io
+import math
 from datetime import datetime
 from xml.sax.saxutils import escape as xml_escape
 from reportlab.lib.pagesizes import letter
@@ -161,37 +162,91 @@ def generate_patient_pdf(
     story.append(Spacer(1, 6))
     story.append(HRFlowable(width="100%", thickness=1, color=gray_border, spaceBefore=2, spaceAfter=8))
 
-    # 2. Patient Demographics & Reference Laboratory Data
+    # 2. Patient Demographics & Reference Laboratory Data (De-identified & Privacy-Protected)
     story.append(Paragraph("1. PATIENT DEMOGRAPHICS & CLINICAL LABORATORY REFERENCE", section_heading))
 
-    safe_name = _safe_xml(patient_name)
-    safe_gender = _safe_xml(gender)
-    safe_weight = _safe_xml(weight)
-    safe_tsh = _safe_xml(tsh_val)
-    safe_ft4 = _safe_xml(ft4_val)
-    safe_ref = _safe_xml(ref_status)
+    def _clean_str(val, fallback="Not Recorded"):
+        if val is None:
+            return fallback
+        s = str(val).strip()
+        if not s or s.lower() in ['nan', 'none', 'null', 'n/a', 'nan kg', 'nan ng/dl', 'nan miu/l']:
+            return fallback
+        if s.lower().startswith('nan'):
+            return fallback
+        return s
 
-    tsh_display = f"{safe_tsh} mIU/L" if safe_tsh and 'pending' not in str(safe_tsh).lower() else safe_tsh
+    def _safe_float(val, default=0.0):
+        try:
+            f = float(val)
+            return default if (math.isnan(f) or math.isinf(f)) else f
+        except:
+            return default
+
+    clean_gender = _clean_str(gender, fallback="Not Recorded")
+    clean_weight = _clean_str(weight, fallback="Not Recorded")
+    clean_tsh = _clean_str(tsh_val, fallback="Pending Evaluation")
+    clean_ft4 = _clean_str(ft4_val, fallback="Pending Evaluation")
+    clean_ref = _clean_str(ref_status, fallback="Pending Evaluation")
+
+    # Format TSH display
+    if clean_tsh != "Pending Evaluation":
+        if "miu/l" not in clean_tsh.lower():
+            tsh_display = f"{_safe_xml(clean_tsh)} mIU/L"
+        else:
+            tsh_display = _safe_xml(clean_tsh)
+    else:
+        tsh_display = "Pending Evaluation"
+
+    # Format FT4 display
+    if clean_ft4 != "Pending Evaluation":
+        if "ng/dl" not in clean_ft4.lower():
+            ft4_display = f"{_safe_xml(clean_ft4)} ng/dL"
+        else:
+            ft4_display = _safe_xml(clean_ft4)
+    else:
+        ft4_display = "Pending Evaluation"
+
+    # Format Weight display
+    if clean_weight != "Not Recorded":
+        if "kg" not in clean_weight.lower():
+            weight_display = f"{_safe_xml(clean_weight)} kg"
+        else:
+            weight_display = _safe_xml(clean_weight)
+    else:
+        weight_display = "Not Recorded"
+
+    # Format Age display
+    if age is not None and str(age).strip().lower() not in ['nan', 'none', 'null', '']:
+        try:
+            age_f = float(age)
+            age_display = f"{age_f:.0f} Years" if not (math.isnan(age_f) or math.isinf(age_f)) else "Not Recorded"
+        except:
+            age_display = "Not Recorded"
+    else:
+        age_display = "Not Recorded"
+
+    # Ensure patient display strictly adheres to de-identified privacy format
+    deid_patient = f"Research Participant {safe_pid} (De-identified Study Record - Privacy Protected)"
 
     demo_data = [
         [
-            Paragraph("<b>Patient ID:</b>", body_style), Paragraph(safe_pid, body_bold),
-            Paragraph("<b>Full Name:</b>", body_style), Paragraph(safe_name, body_bold)
+            Paragraph("<b>Patient:</b>", body_style), Paragraph(_safe_xml(deid_patient), body_bold),
+            Paragraph("<b>Study ID:</b>", body_style), Paragraph(safe_pid, body_bold)
         ],
         [
-            Paragraph("<b>Age:</b>", body_style), Paragraph(f"{age:.0f} Years", body_style),
-            Paragraph("<b>Gender:</b>", body_style), Paragraph(safe_gender, body_style)
+            Paragraph("<b>Age:</b>", body_style), Paragraph(age_display, body_style),
+            Paragraph("<b>Gender:</b>", body_style), Paragraph(_safe_xml(clean_gender), body_style)
         ],
         [
-            Paragraph("<b>Weight:</b>", body_style), Paragraph(safe_weight, body_style),
+            Paragraph("<b>Weight:</b>", body_style), Paragraph(weight_display, body_style),
             Paragraph("<b>Clinical TSH:</b>", body_style), Paragraph(tsh_display, body_bold)
         ],
         [
-            Paragraph("<b>Serum FT4:</b>", body_style), Paragraph(safe_ft4, body_style),
-            Paragraph("<b>Lab Benchmark Status:</b>", body_style), Paragraph(f"<b>{safe_ref}</b>", body_bold)
+            Paragraph("<b>Serum FT4:</b>", body_style), Paragraph(ft4_display, body_style),
+            Paragraph("<b>Lab Benchmark Status:</b>", body_style), Paragraph(f"<b>{_safe_xml(clean_ref)}</b>", body_bold)
         ]
     ]
-    demo_table = Table(demo_data, colWidths=[110, 160, 110, 160])
+    demo_table = Table(demo_data, colWidths=[75, 245, 90, 130])
     demo_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), gray_bg),
         ('GRID', (0, 0), (-1, -1), 0.5, gray_border),
@@ -207,11 +262,11 @@ def generate_patient_pdf(
     # 3. Multimodal Bio-Signal Sensor Findings
     story.append(Paragraph("2. MULTIMODAL SENSOR BIOMARKER ANALYSIS", section_heading))
 
-    tremor_8_12 = sensor_feats.get('tremor_amag_ratio_8_12', 0.0) * 100
-    tremor_freq = sensor_feats.get('tremor_amag_dom_freq', 0.0)
-    tremor_rms = sensor_feats.get('tremor_amag_rms', 0.0)
-    neck_mean = sensor_feats.get('neck_mean_mm', 0.0)
-    neck_std = sensor_feats.get('neck_std_mm', 0.0)
+    tremor_8_12 = _safe_float(sensor_feats.get('tremor_amag_ratio_8_12', 0.0)) * 100
+    tremor_freq = _safe_float(sensor_feats.get('tremor_amag_dom_freq', 0.0))
+    tremor_rms = _safe_float(sensor_feats.get('tremor_amag_rms', 0.0))
+    neck_mean = _safe_float(sensor_feats.get('neck_mean_mm', 0.0))
+    neck_std = _safe_float(sensor_feats.get('neck_std_mm', 0.0))
 
     sensor_data = [
         [

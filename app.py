@@ -366,8 +366,8 @@ st.markdown("""
 
     /* User Profile Sidebar Card */
     .user-profile-card {
-        background: #f1f5f9;
-        border: 1px solid #cbd5e1;
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
         border-radius: 10px;
         padding: 12px;
         margin-bottom: 16px;
@@ -375,22 +375,246 @@ st.markdown("""
     .user-profile-title {
         font-size: 0.72rem;
         font-weight: 700;
-        color: #64748b;
+        color: #2dd4bf !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 4px;
     }
     .user-profile-name {
-        font-size: 0.92rem;
-        font-weight: 700;
-        color: #0f172a;
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #ffffff !important;
     }
     .user-profile-meta {
         font-size: 0.78rem;
-        color: #475569;
+        color: #94a3b8 !important;
+    }
+
+    /* ========================================================== */
+    /* HIGH-CONTRAST ACCESSIBILITY & VISIBILITY OVERRIDES         */
+    /* ========================================================== */
+
+    /* 1. Dark High-Contrast Sidebar */
+    section[data-testid="stSidebar"],
+    [data-testid="stSidebar"] {
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
+        border-right: 1px solid #1e293b !important;
+    }
+    section[data-testid="stSidebar"] *,
+    [data-testid="stSidebar"] * {
+        color: #f8fafc !important;
+    }
+    section[data-testid="stSidebar"] hr,
+    [data-testid="stSidebar"] hr {
+        border-color: #334155 !important;
+    }
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+        color: #f8fafc !important;
+        font-weight: 700 !important;
+        font-size: 0.88rem !important;
+    }
+    section[data-testid="stSidebar"] div[data-baseweb="select"],
+    [data-testid="stSidebar"] div[data-baseweb="select"] {
+        background-color: #1e293b !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+    }
+    section[data-testid="stSidebar"] div[data-baseweb="select"] *,
+    [data-testid="stSidebar"] div[data-baseweb="select"] * {
+        background-color: transparent !important;
+        color: #ffffff !important;
+    }
+    section[data-testid="stSidebar"] .stRadio label p,
+    [data-testid="stSidebar"] .stRadio label p {
+        color: #f8fafc !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #1e293b !important;
+        color: #ffffff !important;
+        border: 1px solid #475569 !important;
+        font-weight: 700 !important;
+        border-radius: 8px !important;
+        box-shadow: none !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover,
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #334155 !important;
+        border-color: #2dd4bf !important;
+        color: #2dd4bf !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button * {
+        color: inherit !important;
+    }
+
+    /* 2. Main Workspace Contrast & Crisp Dark Typography */
+    section[data-testid="stMain"],
+    [data-testid="stMain"],
+    .main .block-container {
+        background-color: #f8fafc !important;
+        color: #0f172a !important;
+    }
+    section[data-testid="stMain"] h1,
+    section[data-testid="stMain"] h2,
+    section[data-testid="stMain"] h3,
+    section[data-testid="stMain"] h4,
+    section[data-testid="stMain"] h5,
+    section[data-testid="stMain"] h6 {
+        color: #0f172a !important;
+        font-weight: 700 !important;
+    }
+    section[data-testid="stMain"] p {
+        color: #334155 !important;
+    }
+
+    /* 3. High-Contrast Form & Widget Labels (Never Faint or Washed Out) */
+    section[data-testid="stMain"] label,
+    section[data-testid="stMain"] .stSelectbox label,
+    section[data-testid="stMain"] .stMultiSelect label,
+    section[data-testid="stMain"] .stTextInput label,
+    section[data-testid="stMain"] .stTextArea label,
+    section[data-testid="stMain"] .stSlider label,
+    section[data-testid="stMain"] .stRadio label,
+    section[data-testid="stMain"] [data-testid="stWidgetLabel"],
+    section[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
+    section[data-testid="stMain"] [data-testid="stWidgetLabel"] span {
+        color: #0f172a !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+        letter-spacing: -0.01em !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+    /* 4. High-Contrast Action Buttons (Solid Forest Teal, Bold White Text) */
+    section[data-testid="stMain"] .stButton > button,
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button,
+    section[data-testid="stMain"] .stDownloadButton > button,
+    section[data-testid="stMain"] button[kind="primary"],
+    section[data-testid="stMain"] button[kind="secondary"] {
+        background-color: #0f766e !important;
+        background-image: none !important;
+        color: #ffffff !important;
+        border: 1.5px solid #0d9488 !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+        padding: 0.55rem 1.15rem !important;
+        box-shadow: 0 2px 4px rgba(15, 118, 110, 0.2) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    section[data-testid="stMain"] .stButton > button:hover,
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button:hover,
+    section[data-testid="stMain"] .stDownloadButton > button:hover,
+    section[data-testid="stMain"] button[kind="primary"]:hover,
+    section[data-testid="stMain"] button[kind="secondary"]:hover {
+        background-color: #115e59 !important;
+        border-color: #0f766e !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 10px rgba(15, 118, 110, 0.3) !important;
+        transform: translateY(-1px) !important;
+    }
+    section[data-testid="stMain"] .stButton > button *,
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button *,
+    section[data-testid="stMain"] .stDownloadButton > button * {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+    }
+
+    /* 5. Dropdown & Input Controls in Main Workspace */
+    section[data-testid="stMain"] div[data-baseweb="select"] {
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        background-color: #ffffff !important;
+    }
+    section[data-testid="stMain"] div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    section[data-testid="stMain"] div[data-baseweb="select"] * {
+        color: #0f172a !important;
+    }
+    section[data-testid="stMain"] input,
+    section[data-testid="stMain"] textarea {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ==========================================================
+# DATA SANITIZATION & PRIVACY PROTECTION HELPERS
+# ==========================================================
+
+def format_weight(w):
+    """Format weight safely without leaking nan strings or real data issues."""
+    if pd.isna(w) or w is None:
+        return "Not Recorded"
+    s = str(w).strip()
+    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan kg']:
+        return "Not Recorded"
+    s_clean = s.replace('kg', '').strip()
+    try:
+        val = float(s_clean)
+        if np.isnan(val) or np.isinf(val):
+            return "Not Recorded"
+        return f"{val:.1f} kg" if val % 1 != 0 else f"{int(val)} kg"
+    except:
+        return f"{s_clean} kg"
+
+def format_tsh(t):
+    """Format TSH value safely without leaking nan strings."""
+    if pd.isna(t) or t is None:
+        return "Pending Evaluation"
+    s = str(t).strip()
+    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan miu/l']:
+        return "Pending Evaluation"
+    s_clean = s.replace('mIU/L', '').replace('miu/l', '').strip()
+    return f"{s_clean} mIU/L"
+
+def format_ft4(f):
+    """Format FT4 value safely without leaking nan strings."""
+    if pd.isna(f) or f is None:
+        return "Pending Evaluation"
+    s = str(f).strip()
+    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan ng/dl']:
+        return "Pending Evaluation"
+    s_clean = s.replace('ng/dL', '').replace('ng/dl', '').strip()
+    return f"{s_clean} ng/dL"
+
+def format_age(a):
+    """Format Age safely without leaking nan strings."""
+    if pd.isna(a) or a is None:
+        return "Not Recorded"
+    s = str(a).strip()
+    if not s or s.lower() in ['nan', 'none', 'n/a', 'null']:
+        return "Not Recorded"
+    try:
+        val = float(s)
+        if np.isnan(val) or np.isinf(val):
+            return "Not Recorded"
+        return f"{int(round(val))} yrs"
+    except:
+        return f"{s} yrs"
+
+def format_gender(g):
+    """Format Gender safely."""
+    if pd.isna(g) or g is None:
+        return "Not Recorded"
+    s = str(g).strip()
+    if not s or s.lower() in ['nan', 'none', 'n/a', 'null']:
+        return "Not Recorded"
+    return s.capitalize()
 
 
 # ==========================================================
@@ -420,10 +644,12 @@ def normalize_pid(p):
 
 @st.cache_data
 def load_subject_metadata():
-    """Load clinical subject demographic records from Subject Info Updated.xlsx."""
+    """Load clinical subject demographic records from Subject Info Updated.xlsx with de-identification."""
     if os.path.exists("Subject Info Updated.xlsx"):
         df = pd.read_excel("Subject Info Updated.xlsx")
         df['pid'] = df['Patient ID'].apply(normalize_pid)
+        # De-identify patient names across the application to ensure complete privacy
+        df['Patient Name'] = df['pid'].apply(lambda p: f"Participant {p} (Anonymized)")
         def clean_tsh_val(v):
             if pd.isna(v): return np.nan
             s = str(v).strip()
@@ -670,8 +896,8 @@ st.sidebar.markdown(f"""
 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
     <div style="background: #0d9488; color: #ffffff; font-weight: 800; font-size: 1.1rem; width: 32px; height: 32px; border-radius: 7px; display: flex; align-items: center; justify-content: center;">T</div>
     <div>
-        <div style="font-weight: 800; font-size: 1.05rem; color: #0f172a; line-height: 1.1;">Thyroid Monitor</div>
-        <div style="font-size: 0.72rem; color: #0d9488; font-weight: 700;">Multimodal Research Desktop</div>
+        <div style="font-weight: 800; font-size: 1.05rem; color: #ffffff !important; line-height: 1.1;">Thyroid Monitor</div>
+        <div style="font-size: 0.72rem; color: #2dd4bf !important; font-weight: 700;">Multimodal Research Desktop</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1012,7 +1238,7 @@ elif menu == "👥 Patients":
         with f_c2:
             gender_filter = st.selectbox("Gender:", ["All Genders", "Female", "Male"])
         with f_c3:
-            search_query = st.text_input("🔍 Search by Patient ID or Name:", placeholder="e.g. TH054 or Sifat")
+            search_query = st.text_input("🔍 Search by Patient ID:", placeholder="e.g. TH054")
 
         # Apply filtering
         filtered_df = metadata_df[metadata_df['status'].isin(selected_statuses)].copy()
@@ -1020,10 +1246,7 @@ elif menu == "👥 Patients":
             filtered_df = filtered_df[filtered_df['Gender'].astype(str).str.lower() == gender_filter.lower()]
         if search_query.strip():
             sq = search_query.strip().lower()
-            filtered_df = filtered_df[
-                filtered_df['pid'].str.lower().str.contains(sq) |
-                filtered_df['Patient Name'].astype(str).str.lower().str.contains(sq)
-            ]
+            filtered_df = filtered_df[filtered_df['pid'].str.lower().str.contains(sq)]
 
         # Metric summary row
         p_c1, p_c2, p_c3, p_c4 = st.columns(4)
@@ -1034,17 +1257,15 @@ elif menu == "👥 Patients":
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Prepare sanitized dataframe for display
-        disp_df = filtered_df[['pid', 'Patient Name', 'Age', 'Gender', 'Weight', 'TSH', 'FT4', 'status']].copy()
-        disp_df.columns = ['Patient ID', 'Name', 'Age', 'Gender', 'Weight (kg)', 'TSH (mIU/L)', 'FT4 (ng/dL)', 'Clinical Benchmark']
-        disp_df['Patient ID'] = disp_df['Patient ID'].astype(str)
-        disp_df['Name'] = disp_df['Name'].astype(str).replace({'nan': 'Anonymous', 'None': 'Anonymous'})
-        disp_df['Age'] = disp_df['Age'].apply(lambda x: f"{x:.0f}" if pd.notna(x) and str(x).replace('.','',1).isdigit() else "N/A")
-        disp_df['Gender'] = disp_df['Gender'].astype(str).replace({'nan': 'N/A', 'None': 'N/A'})
-        disp_df['Weight (kg)'] = disp_df['Weight (kg)'].astype(str).replace({'nan': 'N/A', 'None': 'N/A'})
-        disp_df['TSH (mIU/L)'] = disp_df['TSH (mIU/L)'].astype(str).replace({'nan': 'N/A', 'None': 'N/A'})
-        disp_df['FT4 (ng/dL)'] = disp_df['FT4 (ng/dL)'].astype(str).replace({'nan': 'N/A', 'None': 'N/A'})
-        disp_df['Clinical Benchmark'] = disp_df['Clinical Benchmark'].astype(str)
+        # Prepare de-identified & sanitized dataframe for display (Patient Name column dropped for data privacy)
+        disp_df = pd.DataFrame()
+        disp_df['Patient ID'] = filtered_df['pid'].astype(str)
+        disp_df['Age'] = filtered_df['Age'].apply(lambda x: format_age(x).replace(' yrs', ''))
+        disp_df['Gender'] = filtered_df['Gender'].apply(format_gender)
+        disp_df['Weight (kg)'] = filtered_df['Weight'].apply(lambda x: format_weight(x).replace(' kg', ''))
+        disp_df['TSH (mIU/L)'] = filtered_df['TSH'].apply(lambda x: format_tsh(x).replace(' mIU/L', ''))
+        disp_df['FT4 (ng/dL)'] = filtered_df['FT4'].apply(lambda x: format_ft4(x).replace(' ng/dL', ''))
+        disp_df['Clinical Benchmark'] = filtered_df['status'].fillna('Unclassified')
 
         st.dataframe(disp_df, use_container_width=True, hide_index=True)
 
@@ -1057,13 +1278,20 @@ elif menu == "👥 Patients":
 
             t_files, n_files = find_patient_sensor_files(inspected_pid)
 
+            p_weight_disp = format_weight(p_row.get('Weight'))
+            p_tsh_disp = format_tsh(p_row.get('TSH'))
+            p_ft4_disp = format_ft4(p_row.get('FT4'))
+            p_age_disp = format_age(p_row.get('Age'))
+            p_gender_disp = format_gender(p_row.get('Gender'))
+            p_status_disp = str(p_row.get('status', 'Unclassified')).strip()
+
             col_i1, col_i2 = st.columns([1.5, 1])
             with col_i1:
                 st.markdown(f"""
                 <div class="patient-info-box" style="background:#ffffff; border:1.5px solid #0d9488; border-radius:10px; padding:16px;">
-                    <div style="font-size:1.1rem; font-weight:800; color:#0d9488; margin-bottom:8px;">{p_row.get('pid')} &bull; {p_row.get('Patient Name', 'Anonymous')}</div>
-                    <div><b>Age:</b> {p_row.get('Age', 'N/A')} yrs &nbsp;|&nbsp; <b>Gender:</b> {p_row.get('Gender', 'N/A')} &nbsp;|&nbsp; <b>Weight:</b> {p_row.get('Weight', 'N/A')} kg</div>
-                    <div style="margin-top:6px;"><b>Serum TSH:</b> {p_row.get('TSH', 'N/A')} mIU/L &nbsp;|&nbsp; <b>FT4:</b> {p_row.get('FT4', 'N/A')} &nbsp;|&nbsp; <b>Benchmark:</b> {p_row.get('status')}</div>
+                    <div style="font-size:1.1rem; font-weight:800; color:#0d9488; margin-bottom:8px;">🔬 Participant {inspected_pid} &bull; Research Subject (De-identified)</div>
+                    <div><b>Age:</b> {p_age_disp} &nbsp;|&nbsp; <b>Gender:</b> {p_gender_disp} &nbsp;|&nbsp; <b>Weight:</b> {p_weight_disp}</div>
+                    <div style="margin-top:6px;"><b>Serum TSH:</b> {p_tsh_disp} &nbsp;|&nbsp; <b>FT4:</b> {p_ft4_disp} &nbsp;|&nbsp; <b>Benchmark:</b> {p_status_disp}</div>
                     <div style="margin-top:6px; font-size:0.85rem; color:#64748b;"><b>Stored Files:</b> {len(t_files)} Tremor CSVs, {len(n_files)} Neck Distance CSVs</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1469,7 +1697,7 @@ elif menu == "🩺 Machine Learning":
             all_pids = [f"TH{i:03d}" for i in range(1, 128)]
             if not metadata_df.empty:
                 meta_dict = metadata_df.set_index('pid').to_dict('index')
-                opts = [f"{pid} — {meta_dict.get(pid, {}).get('status', 'Unclassified')} (TSH: {meta_dict.get(pid, {}).get('TSH', 'N/A')})" for pid in all_pids]
+                opts = [f"{pid} — {meta_dict.get(pid, {}).get('status', 'Unclassified')} (TSH: {format_tsh(meta_dict.get(pid, {}).get('TSH'))})" for pid in all_pids]
 
                 if 'ml_patient_explorer' in st.session_state and st.session_state['ml_patient_explorer'] in all_pids:
                     target_idx = all_pids.index(st.session_state['ml_patient_explorer'])
@@ -1525,22 +1753,17 @@ elif menu == "🩺 Machine Learning":
             neck_df = pd.read_csv(n_files[0])
             st.info("Loaded reference benchmark patient **TH054**.")
 
-    # Patient Demographic Metadata Bar
+    # Patient Demographic Metadata Bar (De-identified & Privacy Protected)
     if not metadata_df.empty and selected_pid != "CUSTOM_UPLOAD":
         p_row = metadata_df[metadata_df['pid'] == selected_pid]
         if not p_row.empty:
             r = p_row.iloc[0]
             actual_label = str(r.get('status', actual_label)).strip()
-            tsh_raw = str(r.get('TSH', actual_tsh)).strip()
             p_age = safe_float(r.get('Age', 35), default=35)
-            p_gender = str(r.get('Gender', 'Female')).strip()
-            p_name = str(r.get('Patient Name', 'Anonymous')).strip()
-            ft4_raw = str(r.get('FT4', '')).strip()
-            wt_raw = str(r.get('Weight', '')).strip()
-
-            p_ft4 = "Pending Lab" if (not ft4_raw or ft4_raw.lower() in ['nan', 'none', 'n/a']) else f"{ft4_raw} ng/dL"
-            p_wt = "N/A" if (not wt_raw or wt_raw.lower() in ['nan', 'none', 'n/a']) else f"{wt_raw} kg"
-            tsh_disp = "Pending Lab" if (not tsh_raw or tsh_raw.lower() in ['nan', 'none', 'n/a']) else f"{tsh_raw} mIU/L"
+            p_gender = format_gender(r.get('Gender', 'Female'))
+            p_ft4 = format_ft4(r.get('FT4'))
+            p_wt = format_weight(r.get('Weight'))
+            tsh_disp = format_tsh(r.get('TSH', actual_tsh))
 
             if "Normal" in actual_label:
                 status_badge = f'<span style="background-color:#d1fae5; color:#065f46; border:1px solid #10b981; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
@@ -1552,19 +1775,18 @@ elif menu == "🩺 Machine Learning":
                 status_badge = f'<span style="background-color:#e2e8f0; color:#1e293b; border:1px solid #94a3b8; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
 
             st.markdown(f"""
-            <div class="patient-info-box" style="background-color:#f1f5f9; border:2px solid #0284c7; border-radius:10px; padding:16px 20px; color:#0f172a; margin-bottom:16px;">
-                <div style="font-size:1.05rem; font-weight:700; color:#0369a1; margin-bottom:8px;">
-                    📋 Subject Demographics & Clinical Records
+            <div class="patient-info-box" style="background-color:#ffffff; border:2px solid #0d9488; border-radius:10px; padding:16px 20px; color:#0f172a; margin-bottom:16px;">
+                <div style="font-size:1.05rem; font-weight:700; color:#0d9488; margin-bottom:8px;">
+                    📋 Subject Demographics & Clinical Records (De-identified)
                 </div>
                 <div style="font-size:0.95rem; color:#0f172a; line-height:1.8;">
-                    <span style="color:#0369a1; font-weight:700;">Patient ID:</span> <span style="color:#0f172a; font-weight:600;">{selected_pid}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Name:</span> <span style="color:#0f172a; font-weight:600;">{p_name}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Age:</span> <span style="color:#0f172a; font-weight:600;">{p_age:.0f} yrs</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Gender:</span> <span style="color:#0f172a; font-weight:600;">{p_gender}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Weight:</span> <span style="color:#0f172a; font-weight:600;">{p_wt}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Serum TSH:</span> <span style="color:#0f172a; font-weight:600;">{tsh_disp}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">FT4:</span> <span style="color:#0f172a; font-weight:600;">{p_ft4}</span> &nbsp;|&nbsp;
-                    <span style="color:#0369a1; font-weight:700;">Reference Lab Status:</span> {status_badge}
+                    <span style="color:#0f766e; font-weight:700;">Participant:</span> <span style="color:#0f172a; font-weight:600;">Research Subject {selected_pid} (De-identified)</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">Age:</span> <span style="color:#0f172a; font-weight:600;">{format_age(p_age)}</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">Gender:</span> <span style="color:#0f172a; font-weight:600;">{p_gender}</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">Weight:</span> <span style="color:#0f172a; font-weight:600;">{p_wt}</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">Serum TSH:</span> <span style="color:#0f172a; font-weight:600;">{tsh_disp}</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">FT4:</span> <span style="color:#0f172a; font-weight:600;">{p_ft4}</span> &nbsp;|&nbsp;
+                    <span style="color:#0f766e; font-weight:700;">Reference Lab Status:</span> {status_badge}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -1710,25 +1932,24 @@ elif menu == "📄 Reports":
     with col_r_sel:
         rep_pid = st.selectbox("Select Patient to Generate Report:", all_pids, key="report_patient_select")
 
-    # Gather patient data
-    p_name = "Anonymous"
+    # Gather patient data (De-identified & Sanitized)
+    p_deid_name = f"Research Participant {rep_pid} (De-identified Study Record - Privacy Protected)"
     p_age = 35.0
     p_gender = "Female"
-    p_weight = "N/A"
-    p_tsh = "Pending Lab"
-    p_ft4 = "Pending Lab"
+    p_weight = "Not Recorded"
+    p_tsh = "Pending Evaluation"
+    p_ft4 = "Pending Evaluation"
     p_ref = "Unclassified"
 
     if not metadata_df.empty:
         p_row = metadata_df[metadata_df['pid'] == rep_pid]
         if not p_row.empty:
             r = p_row.iloc[0]
-            p_name = str(r.get('Patient Name', 'Anonymous')).strip()
             p_age = safe_float(r.get('Age', 35), default=35)
-            p_gender = str(r.get('Gender', 'Female')).strip()
-            p_weight = f"{r.get('Weight')} kg" if pd.notna(r.get('Weight')) else "N/A"
-            p_tsh = str(r.get('TSH', 'Pending Lab')).strip()
-            p_ft4 = f"{r.get('FT4')} ng/dL" if pd.notna(r.get('FT4')) else "Pending Lab"
+            p_gender = format_gender(r.get('Gender', 'Female'))
+            p_weight = format_weight(r.get('Weight'))
+            p_tsh = format_tsh(r.get('TSH'))
+            p_ft4 = format_ft4(r.get('FT4'))
             p_ref = str(r.get('status', 'Unclassified')).strip()
 
     # Load sensor files & extract features
@@ -1763,7 +1984,7 @@ elif menu == "📄 Reports":
     # Generate PDF Bytes
     pdf_bytes = generate_patient_pdf(
         patient_id=rep_pid,
-        patient_name=p_name,
+        patient_name=p_deid_name,
         age=p_age,
         gender=p_gender,
         weight=p_weight,
@@ -1800,9 +2021,9 @@ elif menu == "📄 Reports":
             <div style="font-size:1.15rem; font-weight:800;">Non-Invasive Multimodal Thyroid Screening Assessment</div>
         </div>
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:14px; font-size:0.85rem;">
-            <div><b>Patient ID:</b> {rep_pid}<br><b>Name:</b> {p_name}</div>
-            <div><b>Age / Gender:</b> {p_age:.0f} yrs / {p_gender}<br><b>Weight:</b> {p_weight}</div>
-            <div><b>Clinical TSH:</b> {p_tsh} mIU/L<br><b>Reference Benchmark:</b> <b>{p_ref}</b></div>
+            <div><b>Participant ID:</b> {rep_pid}<br><b>Subject:</b> Research Participant {rep_pid} (De-identified)</div>
+            <div><b>Age / Gender:</b> {format_age(p_age)} / {p_gender}<br><b>Weight:</b> {p_weight}</div>
+            <div><b>Clinical TSH:</b> {p_tsh}<br><b>Reference Benchmark:</b> <b>{p_ref}</b></div>
         </div>
         <hr style="border:none; border-top:1px solid #e2e8f0; margin:12px 0;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; font-size:0.85rem;">

@@ -425,5 +425,107 @@ class TestInteractiveWebUI(unittest.TestCase):
         self.assertGreater(len(pdf_bytes), 2500)
 
 
+class TestPatientPrivacyAndStyling(unittest.TestCase):
+    def test_patient_data_complete_deidentification(self):
+        from app import load_subject_metadata
+        df = load_subject_metadata()
+        self.assertFalse(df.empty)
+        self.assertIn('Patient Name', df.columns)
+
+        # Check all names are anonymized research codes
+        for name in df['Patient Name']:
+            self.assertTrue(name.startswith("Participant TH"), f"Name was not de-identified: {name}")
+            self.assertTrue(name.endswith("(Anonymized)"), f"Name does not have anonymized tag: {name}")
+
+        # Check banned real patient names NEVER appear anywhere in string columns
+        banned = ['mahbuba', 'hira', 'harun', 'nijhum', 'soheli']
+        for col in df.select_dtypes(include=['object', 'string']).columns:
+            for val in df[col].dropna():
+                for b in banned:
+                    self.assertNotIn(b, str(val).lower(), f"Leaked private name '{b}' in column {col}: {val}")
+
+    def test_nan_sanitization_helpers(self):
+        from app import format_weight, format_tsh, format_ft4, format_age, format_gender
+
+        # Weight sanitization
+        self.assertEqual(format_weight(np.nan), "Not Recorded")
+        self.assertEqual(format_weight(None), "Not Recorded")
+        self.assertEqual(format_weight("nan"), "Not Recorded")
+        self.assertEqual(format_weight("nan kg"), "Not Recorded")
+        self.assertEqual(format_weight("58.0"), "58 kg")
+        self.assertEqual(format_weight(58), "58 kg")
+
+        # TSH sanitization
+        self.assertEqual(format_tsh(np.nan), "Pending Evaluation")
+        self.assertEqual(format_tsh(None), "Pending Evaluation")
+        self.assertEqual(format_tsh("nan"), "Pending Evaluation")
+        self.assertEqual(format_tsh("2.1"), "2.1 mIU/L")
+
+        # FT4 sanitization
+        self.assertEqual(format_ft4(np.nan), "Pending Evaluation")
+        self.assertEqual(format_ft4(None), "Pending Evaluation")
+        self.assertEqual(format_ft4("nan ng/dL"), "Pending Evaluation")
+        self.assertEqual(format_ft4("1.2"), "1.2 ng/dL")
+
+        # Age and Gender sanitization
+        self.assertEqual(format_age(np.nan), "Not Recorded")
+        self.assertEqual(format_age(35), "35 yrs")
+        self.assertEqual(format_gender(np.nan), "Not Recorded")
+        self.assertEqual(format_gender("female"), "Female")
+
+    def test_pdf_deidentification_and_no_nan(self):
+        from src.pdf_generator import generate_patient_pdf
+        pdf_bytes = generate_patient_pdf(
+            patient_id="TH001",
+            patient_name="Mrs. Mahbuba Khatun",  # Real name input should be completely shielded
+            age=float('nan'),
+            gender="nan",
+            weight="nan kg",
+            tsh_val="nan",
+            ft4_val="nan ng/dL",
+            ref_status="nan",
+            pred_label="Normal",
+            prob_dict={"Normal": 0.8, "Hyperthyroid": 0.1, "Hypothyroid": 0.1},
+            model_name="ExtraTrees",
+            sensor_feats={
+                "tremor_amag_ratio_8_12": 0.15,
+                "tremor_amag_dom_freq": 9.0,
+                "tremor_amag_rms": 0.35,
+                "neck_mean_mm": 50.0,
+                "neck_std_mm": 0.25
+            }
+        )
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        # Ensure Mahbuba, nan kg, nan ng/dL never appear in the PDF binary representation
+        pdf_str = pdf_bytes.decode('latin-1', errors='ignore')
+        self.assertNotIn("Mahbuba", pdf_str)
+        self.assertNotIn("nan kg", pdf_str)
+        self.assertNotIn("nan ng/dL", pdf_str)
+        self.assertNotIn("nan mIU/L", pdf_str)
+
+    def test_css_font_contrast_rules(self):
+        with open("app.py", "r", encoding="utf-8") as f:
+            app_code = f.read()
+
+        # Sidebar top branding contrast
+        self.assertIn("#ffffff !important", app_code)
+        self.assertIn("#2dd4bf", app_code)
+
+        # High-contrast action buttons
+        self.assertIn("#0f766e !important", app_code)
+
+        # High-contrast widget labels
+        self.assertIn("section[data-testid=\"stMain\"] label", app_code)
+        self.assertIn("#0f172a !important", app_code)
+
+    def test_streamlit_config_exists(self):
+        self.assertTrue(os.path.exists(".streamlit/config.toml"))
+        with open(".streamlit/config.toml", "r") as f:
+            cfg = f.read()
+        self.assertIn("[theme]", cfg)
+        self.assertIn("#0d9488", cfg)
+
+
 if __name__ == '__main__':
     unittest.main()

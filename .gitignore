@@ -17,4 +17,5 @@ Desktop.ini
 # Virtual environment / Streamlit temp
 venv/
 env/
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
