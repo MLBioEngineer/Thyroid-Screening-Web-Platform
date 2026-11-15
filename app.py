@@ -599,15 +599,53 @@ st.markdown("""
         fill: #0f172a !important;
         color: #0f172a !important;
     }
+    /* 5. Input Controls & Text Fields (Always Crisp White Background & Dark Navy Text) */
+    div[data-baseweb="input"],
+    div[data-baseweb="base-input"],
+    div[data-baseweb="input"] > div,
+    .stTextInput div[data-baseweb="input"],
+    .stNumberInput div[data-baseweb="input"],
+    .stTextArea div[data-baseweb="textarea"],
+    .stTextInput input,
+    .stNumberInput input,
+    .stTextArea textarea,
     section[data-testid="stMain"] input,
     section[data-testid="stMain"] textarea,
     .main input,
-    .main textarea {
-        color: #0f172a !important;
+    .main textarea,
+    input[type="text"],
+    input[type="number"],
+    input {
         background-color: #ffffff !important;
-        border: 1.5px solid #cbd5e1 !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        border: 1.5px solid #94a3b8 !important;
         border-radius: 8px !important;
+        font-size: 0.95rem !important;
         font-weight: 600 !important;
+    }
+    div[data-baseweb="input"]:focus-within,
+    div[data-baseweb="base-input"]:focus-within,
+    .stTextInput input:focus,
+    .stNumberInput input:focus,
+    .stTextArea textarea:focus,
+    input:focus,
+    textarea:focus {
+        border-color: #0d9488 !important;
+        box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.25) !important;
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    input::placeholder,
+    textarea::placeholder,
+    input::-webkit-input-placeholder,
+    textarea::-webkit-input-placeholder {
+        color: #64748b !important;
+        -webkit-text-fill-color: #64748b !important;
+        opacity: 0.8 !important;
     }
 
     /* 6. Dropdown Options Menu / Popover (Always Crisp White Background & Dark Text) */
