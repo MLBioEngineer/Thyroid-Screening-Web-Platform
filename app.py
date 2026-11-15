@@ -60,27 +60,29 @@ st.markdown("""
     }
     .metric-card {
         background-color: #ffffff;
-        border: 1px solid #e2e8f0;
+        border: 1.5px solid #cbd5e1;
         border-radius: 10px;
         padding: 16px;
         text-align: center;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        color: #0f172a !important;
     }
     .metric-value {
         font-size: 1.8rem;
         font-weight: 800;
-        color: #1e3a8a;
+        color: #1e3a8a !important;
     }
     .metric-label {
         font-size: 0.85rem;
-        color: #64748b;
+        color: #334155 !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        font-weight: 700;
     }
     .badge-normal {
         background-color: #ecfdf5;
         border: 2px solid #10b981;
-        color: #065f46;
+        color: #065f46 !important;
         padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
@@ -90,7 +92,7 @@ st.markdown("""
     .badge-hyper {
         background-color: #f5f3ff;
         border: 2px solid #8b5cf6;
-        color: #5b21b6;
+        color: #5b21b6 !important;
         padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
@@ -100,7 +102,7 @@ st.markdown("""
     .badge-hypo {
         background-color: #fffbeb;
         border: 2px solid #f59e0b;
-        color: #92400e;
+        color: #92400e !important;
         padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
@@ -113,16 +115,25 @@ st.markdown("""
         padding: 14px 18px;
         border-radius: 6px;
         font-size: 0.88rem;
-        color: #881337;
+        color: #881337 !important;
         margin-top: 18px;
     }
     .patient-info-box {
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 12px;
-        font-size: 0.9rem;
+        background-color: #f1f5f9;
+        border: 2px solid #0284c7;
+        border-radius: 10px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        font-size: 0.95rem;
+        color: #0f172a !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        line-height: 1.7;
+    }
+    .patient-info-box strong {
+        color: #0369a1 !important;
+    }
+    .patient-info-box span {
+        color: #0f172a !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -432,25 +443,43 @@ if menu == "🩺 Live Thyroid Screening":
         p_row = metadata_df[metadata_df['pid'] == selected_pid]
         if not p_row.empty:
             r = p_row.iloc[0]
-            actual_label = r.get('status', actual_label)
-            actual_tsh = r.get('TSH', actual_tsh)
+            actual_label = str(r.get('status', actual_label)).strip()
+            tsh_raw = str(r.get('TSH', actual_tsh)).strip()
             p_age = safe_float(r.get('Age', 35), default=35)
             p_gender = str(r.get('Gender', 'Female')).strip()
             p_name = str(r.get('Patient Name', 'Anonymous')).strip()
-            p_ft4 = str(r.get('FT4', 'N/A')).strip()
-            p_wt = str(r.get('Weight', 'N/A')).strip()
+            ft4_raw = str(r.get('FT4', '')).strip()
+            wt_raw = str(r.get('Weight', '')).strip()
+
+            p_ft4 = "Pending Lab" if (not ft4_raw or ft4_raw.lower() in ['nan', 'none', 'n/a']) else f"{ft4_raw} ng/dL"
+            p_wt = "N/A" if (not wt_raw or wt_raw.lower() in ['nan', 'none', 'n/a']) else f"{wt_raw} kg"
+            tsh_disp = "Pending Lab" if (not tsh_raw or tsh_raw.lower() in ['nan', 'none', 'n/a']) else f"{tsh_raw} mIU/L"
+
+            # Badge color for reference status
+            if "Normal" in actual_label:
+                status_badge = f'<span style="background-color:#d1fae5; color:#065f46; border:1px solid #10b981; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
+            elif "Hyper" in actual_label:
+                status_badge = f'<span style="background-color:#ede9fe; color:#5b21b6; border:1px solid #8b5cf6; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
+            elif "Hypo" in actual_label:
+                status_badge = f'<span style="background-color:#fef3c7; color:#92400e; border:1px solid #f59e0b; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
+            else:
+                status_badge = f'<span style="background-color:#e2e8f0; color:#1e293b; border:1px solid #94a3b8; padding:3px 10px; border-radius:6px; font-weight:700;">{actual_label}</span>'
 
             st.markdown(f"""
-            <div class="patient-info-box">
-                <strong>📋 Subject Demographics & Clinical Records:</strong><br>
-                <strong>ID:</strong> {selected_pid} &nbsp;|&nbsp;
-                <strong>Name:</strong> {p_name} &nbsp;|&nbsp;
-                <strong>Age:</strong> {p_age:.0f} &nbsp;|&nbsp;
-                <strong>Gender:</strong> {p_gender} &nbsp;|&nbsp;
-                <strong>Weight:</strong> {p_wt} &nbsp;|&nbsp;
-                <strong>Serum TSH:</strong> {actual_tsh} mIU/L &nbsp;|&nbsp;
-                <strong>FT4:</strong> {p_ft4} ng/dL &nbsp;|&nbsp;
-                <strong>Reference Status:</strong> <span style="font-weight:bold; color:#1e3a8a;">{actual_label}</span>
+            <div class="patient-info-box" style="background-color:#f1f5f9; border:2px solid #0284c7; border-radius:10px; padding:16px 20px; color:#0f172a; margin-bottom:16px;">
+                <div style="font-size:1.05rem; font-weight:700; color:#0369a1; margin-bottom:8px;">
+                    📋 Subject Demographics & Clinical Records
+                </div>
+                <div style="font-size:0.95rem; color:#0f172a; line-height:1.8;">
+                    <span style="color:#0369a1; font-weight:700;">Patient ID:</span> <span style="color:#0f172a; font-weight:600;">{selected_pid}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Name:</span> <span style="color:#0f172a; font-weight:600;">{p_name}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Age:</span> <span style="color:#0f172a; font-weight:600;">{p_age:.0f} yrs</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Gender:</span> <span style="color:#0f172a; font-weight:600;">{p_gender}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Weight:</span> <span style="color:#0f172a; font-weight:600;">{p_wt}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Serum TSH:</span> <span style="color:#0f172a; font-weight:600;">{tsh_disp}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">FT4:</span> <span style="color:#0f172a; font-weight:600;">{p_ft4}</span> &nbsp;|&nbsp;
+                    <span style="color:#0369a1; font-weight:700;">Reference Lab Status:</span> {status_badge}
+                </div>
             </div>
             """, unsafe_allow_html=True)
             age_in = p_age
