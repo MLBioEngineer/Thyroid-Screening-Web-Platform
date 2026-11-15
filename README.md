@@ -123,26 +123,32 @@ Exact performance recorded on the **11-patient held-out test cohort** (matching 
 
 ---
 
-## 🚀 Interactive Web Application Guide
+## 🚀 Thyroid Monitor — Professional Research Desktop
 
-An interactive Streamlit web dashboard is included:
-- **Live Screening Engine**: Upload your own `tremor_*.csv` and `neck_*.csv` or select test patients (e.g., TH001, TH015, TH087) to view real-time predictions, class probabilities, and risk assessments.
-- **Interactive Sensor Signal Visualizer**: Explore 6-axis IMU acceleration & angular velocity waveforms, Welch frequency power spectra, and optical neck distance repeatability.
-- **Explainable AI (XAI)**: View top MDI feature rankings explaining model predictions.
-- **Interactive Benchmark Comparison**: View confusion matrices, ROC curves, and radar charts.
+An interactive Streamlit research workspace matching professional desktop clinical software:
+- **Phone & Gender Researcher Sign-In**: Secure credential gate persisting session state (`st.session_state.logged_in`) with phone number validation and researcher profile tracking.
+- **🏠 System Overview Dashboard**: Deep forest teal hero card (`#0a3d36`/`#0f594e`), live orbital radar graphic (`IMU`, `VOICE`, `ToF`), 4 clean metric cards (127 Participants, 1 ESP32 Device, 308 Test Sessions, 1000+ Sensor Records), and recent sessions/modality overview.
+- **👥 Participants Directory**: Full 127-patient searchable clinical registry with demographic filters (Age, Gender, Weight, TSH, FT4).
+- **📱 Registered Devices**: ESP32 WROOM-32 registry, sensor pinout tables (MPU6050, VL53L0X, INMP441, SSD1306), and telemetry diagnostics.
+- **⏱️ Test Sessions**: Inspection and archival registry of all 308 multimodal measurement sessions across 127 subjects.
+- **📊 Sensor Data Viewer**: High-resolution interactive visualizer for 3-axis IMU acceleration & angular velocity waveforms, Welch frequency power spectra (3-5 Hz resting, 5-8 Hz postural, 8-12 Hz thyrotoxic), and VL53L0X neck surface distance curves.
+- **🩺 Machine Learning Screening Engine**: Live inference powered by the trained `ExtraTrees` (63.6% poster benchmark match) and `ANN_top40` models with class probabilities, risk assessment, and Explainable AI (XAI) feature attribution.
+- **📄 Clinical Reports with One-Click PDF Download**: Automated generation of publication-grade PDF screening reports via `reportlab` containing patient demographics, sensor findings, ML screening inference, and clinician sign-off blocks.
+- **⚙️ Settings & Audit Trail**: Logged-in profile, sensor calibration offsets, and chronological audit trail of all workspace actions.
 
 ### How to Run Locally:
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. (Optional) Re-train and verify all ML models
-python src/model_trainer.py
+# 2. (Optional) Run all verification tests
+python test_app.py
+python -m unittest tests/test_screening_system.py
 
-# 3. Launch the Streamlit Web Application
+# 3. Launch the Thyroid Monitor Desktop App
 streamlit run app.py
 ```
-Then navigate to `http://localhost:8501` in your browser.
+Then open `http://localhost:8501` in your browser.
 
 ---
 
@@ -175,7 +181,8 @@ All 16 unit tests validate feature calculations across aliased channels, edge ca
 ├── src/
 │   ├── __init__.py             # Module package initializer
 │   ├── feature_extractor.py    # 416-descriptor time/frequency signal extraction
-│   └── model_trainer.py        # ML training and benchmark evaluation pipeline
+│   ├── model_trainer.py        # ML training and benchmark evaluation pipeline
+│   └── pdf_generator.py        # ReportLab clinical screening PDF report generator
 ├── models/
 │   ├── primary_extra_trees.pkl # Trained primary ExtraTrees classifier
 │   ├── ann_top40.pkl           # Trained compact ANN model

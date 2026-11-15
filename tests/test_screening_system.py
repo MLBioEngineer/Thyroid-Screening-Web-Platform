@@ -207,12 +207,14 @@ class TestInteractiveWebUI(unittest.TestCase):
     def test_streamlit_all_pages_render_without_pyarrow_errors(self):
         from streamlit.testing.v1 import AppTest
         menu_items = [
-            "🩺 Live Thyroid Screening",
-            "📈 Sensor Signal Visualizer",
-            "🔬 Project & Hardware Overview",
-            "📊 Dataset Profile & Cohort",
-            "🏆 Benchmark Model Comparison",
-            "📚 References & Clinical Scope"
+            "🏠 Overview",
+            "👥 Patients",
+            "📱 Devices",
+            "⏱️ Test Sessions",
+            "📊 Sensor Data",
+            "🩺 Machine Learning",
+            "📄 Reports",
+            "⚙️ Settings / Audit Trail"
         ]
         for m in menu_items:
             at = AppTest.from_file(self.app_path)
@@ -225,6 +227,10 @@ class TestInteractiveWebUI(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file(self.app_path)
         at.run(timeout=15)
+
+        # Navigate to Machine Learning module
+        r = [r for r in at.radio if "Select Module" in r.proto.label][0]
+        r.set_value("🩺 Machine Learning").run(timeout=15)
 
         p_select = [sb for sb in at.selectbox if "Held-Out" in sb.proto.label][0]
         # Test TH030 specifically
@@ -240,12 +246,47 @@ class TestInteractiveWebUI(unittest.TestCase):
         from streamlit.testing.v1 import AppTest
         at = AppTest.from_file(self.app_path)
         at.run(timeout=15)
+
+        # Navigate to Machine Learning module
+        r = [r for r in at.radio if "Select Module" in r.proto.label][0]
+        r.set_value("🩺 Machine Learning").run(timeout=15)
+
         ds_radio = [r for r in at.radio if "Select Data Source" in r.proto.label][0]
         ds_radio.set_value("Upload Custom Sensor CSVs (ESP32 Live Data)").run(timeout=10)
         self.assertEqual(len(at.exception), 0)
         # Demographic controls (age slider and gender selectbox) should be present
         sliders = [s for s in at.slider if "Age" in s.proto.label]
         self.assertEqual(len(sliders), 1, "Age slider should be rendered for custom upload")
+
+    def test_pdf_generation_validity(self):
+        from src.pdf_generator import generate_patient_pdf
+        pdf_bytes = generate_patient_pdf(
+            patient_id="TH054",
+            patient_name="Mahbuba Khatun",
+            age=35.0,
+            gender="Female",
+            weight="58 kg",
+            tsh_val="2.1",
+            ft4_val="1.2 ng/dL",
+            ref_status="Normal",
+            pred_label="Normal",
+            prob_dict={"Normal": 0.75, "Hyperthyroid": 0.15, "Hypothyroid": 0.10},
+            model_name="ExtraTrees (Primary v9, 60 features) [Poster Match: 63.6%]",
+            sensor_feats={
+                "tremor_amag_ratio_8_12": 0.18,
+                "tremor_amag_dom_freq": 9.2,
+                "tremor_amag_rms": 0.42,
+                "neck_mean_mm": 51.4,
+                "neck_std_mm": 0.35
+            },
+            researcher_name="Dr. Sifat",
+            researcher_phone="01712345678",
+            researcher_gender="Male",
+            clinical_notes="Verified multimodal profile."
+        )
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertGreater(len(pdf_bytes), 2000)
 
     def test_custom_sensor_upload_aliased_columns_and_inference(self):
         from app import run_screening_inference
@@ -271,6 +312,22 @@ class TestInteractiveWebUI(unittest.TestCase):
         self.assertAlmostEqual(sum(probs.values()), 1.0, places=5)
         self.assertEqual(feats['demo_age'], 42.0)
         self.assertEqual(feats['demo_gender'], 0.0)
+
+    def test_unauthenticated_login_flow(self):
+        from streamlit.testing.v1 import AppTest
+        # Force login screen via environment variable
+        os.environ["FORCE_LOGIN_SCREEN"] = "1"
+        try:
+            at = AppTest.from_file(self.app_path)
+            at.run(timeout=15)
+            self.assertEqual(len(at.exception), 0)
+            # Login card inputs must be present
+            phones = [ti for ti in at.text_input if "Phone Number" in ti.proto.label]
+            self.assertEqual(len(phones), 1, "Phone number input should be present on login screen")
+            genders = [sb for sb in at.selectbox if "Gender" in sb.proto.label]
+            self.assertEqual(len(genders), 1, "Gender selectbox should be present on login screen")
+        finally:
+            os.environ.pop("FORCE_LOGIN_SCREEN", None)
 
 
 if __name__ == '__main__':
