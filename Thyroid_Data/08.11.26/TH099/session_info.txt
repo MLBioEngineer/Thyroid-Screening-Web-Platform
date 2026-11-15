@@ -1,0 +1,8 @@
+participant_id=TH099
+trial_id=T02
+collected_at=2026-11-08T11:22:35
+serial_port=COM5
+baud=115200
+voice_rate_hz=16000
+tremor_nominal_rate_hz=100
+neck_expected_samples=10

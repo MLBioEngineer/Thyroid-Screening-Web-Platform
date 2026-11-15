@@ -1,0 +1,10 @@
+﻿participant_id,trial_id,modality,file_wav,file_csv,sample_rate,sample_count,duration_seconds,peak_pcm16_python,rms_pcm16_python,zero_sample_percent,clipped_samples_python,device_peak,device_rms,device_clipped_samples,valid_samples,invalid_samples,nominal_sampling_hz,surface_condition,valid_median_mm,valid_range_mm,nominal_interval_ms,quality_flag
+TH024,T01,voice,voice_T01.wav,voice_T01.csv,16000,64000,4.0,32768,7812.572,1.206,364,32768,7812.572,364,,,,,,,,CLIPPING_REVIEW
+TH024,T01,tremor,,tremor_T01.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH024,T01,neck_distance,,neck_T01.csv,,10,,,,,,,,,10,0,,S,174.5,8,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN
+TH024,T02,voice,voice_T02.wav,voice_T02.csv,16000,64000,4.0,32768,9356.96,1.212,1171,32768,9356.96,1171,,,,,,,,CLIPPING_REVIEW
+TH024,T02,tremor,,tremor_T02.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH024,T02,neck_distance,,neck_T02.csv,,10,,,,,,,,,10,0,,S,185.5,4,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN
+TH024,T03,voice,voice_T03.wav,voice_T03.csv,16000,64000,4.0,32768,7881.396,1.206,258,32768,7881.396,257,,,,,,,,CLIPPING_REVIEW
+TH024,T03,tremor,,tremor_T03.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH024,T03,neck_distance,,neck_T03.csv,,10,,,,,,,,,10,0,,S,191.0,7,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN

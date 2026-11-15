@@ -1,0 +1,7 @@
+﻿participant_id,trial_id,modality,file_wav,file_csv,sample_rate,sample_count,duration_seconds,peak_pcm16_python,rms_pcm16_python,zero_sample_percent,clipped_samples_python,device_peak,device_rms,device_clipped_samples,valid_samples,invalid_samples,nominal_sampling_hz,surface_condition,valid_median_mm,valid_range_mm,nominal_interval_ms,quality_flag
+TH026,T01,voice,voice_T01.wav,voice_T01.csv,16000,64000,4.0,32768,7864.318,1.212,261,32768,7864.318,260,,,,,,,,CLIPPING_REVIEW
+TH026,T01,tremor,,tremor_T01.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH026,T01,neck_distance,,neck_T01.csv,,10,,,,,,,,,10,0,,S,178.0,5,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN
+th026,t02,voice,voice_t02.wav,voice_t02.csv,16000,64000,4.0,26685,5458.584,1.311,0,26685,5458.584,0,,,,,,,,CHECK_WAVEFORM
+th026,t02,tremor,,tremor_t02.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+th026,t02,neck_distance,,neck_t02.csv,,10,,,,,,,,,10,0,,S,191.5,6,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN

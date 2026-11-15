@@ -1,0 +1,8 @@
+participant_id=TH091
+trial_id=T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi
+collected_at=2026-11-05T12:35:18
+serial_port=COM5
+baud=115200
+voice_rate_hz=16000
+tremor_nominal_rate_hz=100
+neck_expected_samples=10

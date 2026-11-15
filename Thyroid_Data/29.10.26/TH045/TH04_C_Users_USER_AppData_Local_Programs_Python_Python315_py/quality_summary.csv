@@ -1,0 +1,7 @@
+﻿participant_id,trial_id,modality,file_wav,file_csv,sample_rate,sample_count,duration_seconds,peak_pcm16_python,rms_pcm16_python,zero_sample_percent,clipped_samples_python,device_peak,device_rms,device_clipped_samples,valid_samples,invalid_samples,nominal_sampling_hz,surface_condition,valid_median_mm,valid_range_mm,nominal_interval_ms,quality_flag
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,3,voice,voice_3.wav,voice_3.csv,16000,64000,4.0,32768,11553.204,1.206,987,32768,11553.204,987,,,,,,,,CLIPPING_REVIEW
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,3,tremor,,tremor_3.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,3,neck_distance,,neck_3.csv,,10,,,,,,,,,10,0,,U,186.0,9,300,SURFACE_DISTANCE_ONLY_REVIEW_REPEATABILITY
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,TO2,voice,voice_TO2.wav,voice_TO2.csv,16000,64000,4.0,708,180.153,1.469,0,708,180.153,0,,,,,,,,CHECK_WAVEFORM
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,TO2,tremor,,tremor_TO2.csv,,1000,,,,,,,,,1000,0,100,,,,,STRUCTURE_OK_REVIEW_SIGNAL
+TH04_C_Users_USER_AppData_Local_Programs_Python_Python315_py,TO2,neck_distance,,neck_TO2.csv,,10,,,,,,,,,10,0,,T,123.0,31,300,SURFACE_MEASURED_COVERED_NOT_COMPARABLE_TO_SKIN

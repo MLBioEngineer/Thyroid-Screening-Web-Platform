@@ -1,0 +1,8 @@
+participant_id=TH063
+trial_id=C_Users_USER_AppData_Local_Programs_Python_Python315_python_
+collected_at=2026-11-03T11:33:51
+serial_port=COM5
+baud=115200
+voice_rate_hz=16000
+tremor_nominal_rate_hz=100
+neck_expected_samples=10

@@ -1,0 +1,11 @@
+﻿participant_id,trial_id,sample_index,distance_mm,measurement_status,surface_condition,interpretation,notes
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,0,160,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,1,159,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,2,164,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,3,163,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,4,161,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,5,156,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,6,162,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,7,156,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,8,159,OK,U,SURFACE_DISTANCE_ONLY,
+TH091,T_C_Users_USER_AppData_Roaming_uv_python_cpython-3_16_0a1-wi,9,155,OK,U,SURFACE_DISTANCE_ONLY,
