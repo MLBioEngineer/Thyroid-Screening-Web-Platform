@@ -590,6 +590,15 @@ def add_audit(action: str):
 # LOGIN SCREEN (Rendered if user is not logged in)
 # ==========================================================
 if not st.session_state.get('logged_in', False):
+    # Hide sidebar completely on login screen so user sees only the login card
+    st.markdown("""
+    <style>
+        [data-testid="stSidebar"], [data-testid="collapsedControl"] {
+            display: none !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Desktop Top Bar Aesthetic on Login
     st.markdown("""
     <div class="desktop-topbar">
@@ -626,13 +635,10 @@ if not st.session_state.get('logged_in', False):
             name_input = st.text_input("🩺 Researcher / Clinician Name (Optional):", placeholder="e.g. Dr. Jannatun Khatun")
             submit_login = st.form_submit_button("🚀 Enter Research Workspace", use_container_width=True)
 
-        col_b1, col_b2 = st.columns(2)
-        with col_b1:
             if submit_login:
-                # Validate phone number
                 clean_phone = re.sub(r'[\s\-\(\)\+]', '', phone_input)
-                if len(clean_phone) < 8 or not clean_phone.isdigit():
-                    st.error("⚠️ Please enter a valid mobile number (at least 8 digits).")
+                if len(clean_phone) < 8 or len(clean_phone) > 16 or not clean_phone.isdigit():
+                    st.error("⚠️ Please enter a valid mobile number (8–16 digits).")
                 else:
                     st.session_state['logged_in'] = True
                     st.session_state['user_phone'] = phone_input.strip()
@@ -642,15 +648,15 @@ if not st.session_state.get('logged_in', False):
                     add_audit(f"Researcher authenticated via phone {phone_input.strip()} ({gender_input}).")
                     st.rerun()
 
-        with col_b2:
-            if st.button("⚡ Quick Access (Guest)", use_container_width=True):
-                st.session_state['logged_in'] = True
-                st.session_state['user_phone'] = "01700000000"
-                st.session_state['user_gender'] = "Female"
-                st.session_state['user_name'] = "Guest Clinician"
-                st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                add_audit("Guest Clinician quick access granted.")
-                st.rerun()
+        st.markdown("<div style='text-align:center; margin: 10px 0; color:#94a3b8; font-size:0.8rem;'>&mdash; OR &mdash;</div>", unsafe_allow_html=True)
+        if st.button("⚡ Quick Access (Guest Clinician Mode)", use_container_width=True):
+            st.session_state['logged_in'] = True
+            st.session_state['user_phone'] = "01700000000"
+            st.session_state['user_gender'] = "Female"
+            st.session_state['user_name'] = "Guest Clinician"
+            st.session_state['login_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            add_audit("Guest Clinician quick access granted.")
+            st.rerun()
 
     st.stop()
 
@@ -707,15 +713,15 @@ workspace_modules = [
 
 # Check if an external action requested a specific module
 if 'nav_choice' in st.session_state and st.session_state['nav_choice'] in workspace_modules:
-    default_nav_idx = workspace_modules.index(st.session_state['nav_choice'])
+    st.session_state['main_workspace_nav'] = st.session_state['nav_choice']
     del st.session_state['nav_choice']
-else:
-    default_nav_idx = 0
+
+if 'main_workspace_nav' not in st.session_state or st.session_state['main_workspace_nav'] not in workspace_modules:
+    st.session_state['main_workspace_nav'] = workspace_modules[0]
 
 menu = st.sidebar.radio(
     "Select Module:",
     workspace_modules,
-    index=default_nav_idx,
     key="main_workspace_nav"
 )
 
@@ -867,7 +873,7 @@ if menu == "🏠 Overview":
         <div class="panel-box">
             <div class="panel-header">
                 <span class="panel-title">Recent test sessions</span>
-                <span style="font-size:0.8rem; font-weight:700; color:#0d9488;">View all &rarr;</span>
+                <span style="font-size:0.8rem; font-weight:700; color:#0d9488;">Live Telemetry</span>
             </div>
             <div class="panel-subtitle">Latest scheduled and completed sessions</div>
             <div class="session-item">
@@ -922,13 +928,17 @@ if menu == "🏠 Overview":
             </div>
         </div>
         """, unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+        if st.button("View all test sessions →", key="btn_view_sessions", use_container_width=True):
+            st.session_state['nav_choice'] = "⏱️ Test Sessions"
+            st.rerun()
 
     with split_right:
         st.markdown("""
         <div class="panel-box">
             <div class="panel-header">
                 <span class="panel-title">Sensor data overview</span>
-                <span style="font-size:0.8rem; font-weight:700; color:#0d9488;">Open data &rarr;</span>
+                <span style="font-size:0.8rem; font-weight:700; color:#0d9488;">Modality Status</span>
             </div>
             <div class="panel-subtitle">Records by measurement modality</div>
             <div class="modality-row">
@@ -973,6 +983,10 @@ if menu == "🏠 Overview":
             </div>
         </div>
         """, unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+        if st.button("Open interactive sensor viewer →", key="btn_open_sensor_viewer", use_container_width=True):
+            st.session_state['nav_choice'] = "📊 Sensor Data"
+            st.rerun()
 
 
 # ==========================================================
@@ -1212,7 +1226,7 @@ elif menu == "⏱️ Test Sessions":
 
     # Generate session records list
     session_rows = []
-    patient_dirs = glob.glob("Thyroid_Data/*/*")
+    patient_dirs = sorted([p for p in glob.glob("Thyroid_Data/*/*") if os.path.isdir(p)])
     for pdir in patient_dirs:
         parts = pdir.replace("\\", "/").split("/")
         if len(parts) >= 3:
@@ -1396,18 +1410,29 @@ elif menu == "🩺 Machine Learning":
     </div>
     """, unsafe_allow_html=True)
 
+    # Check if redirected from Patients module with pre-selected patient
+    if 'selected_screening_pid' in st.session_state:
+        st.session_state['ml_data_source'] = "Browse Full Dataset Explorer (127 Patients)"
+        st.session_state['ml_patient_explorer'] = st.session_state['selected_screening_pid']
+        del st.session_state['selected_screening_pid']
+
+    data_source_opts = [
+        "Preset Held-Out Test Cohort (n=11)",
+        "Browse Full Dataset Explorer (127 Patients)",
+        "Upload Custom Sensor CSVs (ESP32 Live Data)",
+        "Demo Sample Patient (TH054)"
+    ]
+    if 'ml_data_source' not in st.session_state or st.session_state['ml_data_source'] not in data_source_opts:
+        st.session_state['ml_data_source'] = data_source_opts[0]
+
     col_input, col_meta = st.columns([1.8, 1.2])
 
     with col_meta:
         st.markdown("##### ⚙️ Screening Configuration")
         data_source = st.radio(
             "Select Data Source:",
-            [
-                "Preset Held-Out Test Cohort (n=11)",
-                "Browse Full Dataset Explorer (127 Patients)",
-                "Upload Custom Sensor CSVs (ESP32 Live Data)",
-                "Demo Sample Patient (TH054)"
-            ]
+            data_source_opts,
+            key="ml_data_source"
         )
 
     with col_input:
@@ -1445,10 +1470,26 @@ elif menu == "🩺 Machine Learning":
             if not metadata_df.empty:
                 meta_dict = metadata_df.set_index('pid').to_dict('index')
                 opts = [f"{pid} — {meta_dict.get(pid, {}).get('status', 'Unclassified')} (TSH: {meta_dict.get(pid, {}).get('TSH', 'N/A')})" for pid in all_pids]
-                sel_opt = st.selectbox("Select Patient from 127 Cohort:", opts)
+
+                if 'ml_patient_explorer' in st.session_state and st.session_state['ml_patient_explorer'] in all_pids:
+                    target_idx = all_pids.index(st.session_state['ml_patient_explorer'])
+                    st.session_state['ml_cohort_selectbox'] = opts[target_idx]
+                    del st.session_state['ml_patient_explorer']
+
+                if 'ml_cohort_selectbox' not in st.session_state or st.session_state['ml_cohort_selectbox'] not in opts:
+                    st.session_state['ml_cohort_selectbox'] = opts[0]
+
+                sel_opt = st.selectbox("Select Patient from 127 Cohort:", opts, key="ml_cohort_selectbox")
                 selected_pid = all_pids[opts.index(sel_opt)]
             else:
-                selected_pid = st.selectbox("Select Patient ID:", all_pids)
+                if 'ml_patient_explorer' in st.session_state and st.session_state['ml_patient_explorer'] in all_pids:
+                    st.session_state['ml_cohort_selectbox'] = st.session_state['ml_patient_explorer']
+                    del st.session_state['ml_patient_explorer']
+
+                if 'ml_cohort_selectbox' not in st.session_state or st.session_state['ml_cohort_selectbox'] not in all_pids:
+                    st.session_state['ml_cohort_selectbox'] = all_pids[0]
+
+                selected_pid = st.selectbox("Select Patient ID:", all_pids, key="ml_cohort_selectbox")
 
             t_files, n_files = find_patient_sensor_files(selected_pid)
             if t_files and n_files:
@@ -1631,6 +1672,16 @@ elif menu == "🩺 Machine Learning":
                 st.pyplot(fig)
                 plt.close(fig)
 
+        # Quick action: Download PDF report directly for this screened patient
+        if selected_pid != "CUSTOM_UPLOAD":
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_act1, col_act2 = st.columns([1.5, 2.5])
+            with col_act1:
+                if st.button("📄 Generate & Download PDF Report for this Patient", use_container_width=True):
+                    st.session_state['selected_report_pid'] = selected_pid
+                    st.session_state['nav_choice'] = "📄 Reports"
+                    st.rerun()
+
 
 # ==========================================================
 # MODULE 7: 📄 REPORTS (PDF Download Option)
@@ -1648,14 +1699,16 @@ elif menu == "📄 Reports":
 
     # Patient Selector
     all_pids = [f"TH{i:03d}" for i in range(1, 128)]
-    default_rep_idx = 0
     if 'selected_report_pid' in st.session_state and st.session_state['selected_report_pid'] in all_pids:
-        default_rep_idx = all_pids.index(st.session_state['selected_report_pid'])
+        st.session_state['report_patient_select'] = st.session_state['selected_report_pid']
         del st.session_state['selected_report_pid']
+
+    if 'report_patient_select' not in st.session_state or st.session_state['report_patient_select'] not in all_pids:
+        st.session_state['report_patient_select'] = all_pids[0]
 
     col_r_sel, col_r_btn = st.columns([2.5, 1.5])
     with col_r_sel:
-        rep_pid = st.selectbox("Select Patient to Generate Report:", all_pids, index=default_rep_idx)
+        rep_pid = st.selectbox("Select Patient to Generate Report:", all_pids, key="report_patient_select")
 
     # Gather patient data
     p_name = "Anonymous"

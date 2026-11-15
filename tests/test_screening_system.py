@@ -326,8 +326,103 @@ class TestInteractiveWebUI(unittest.TestCase):
             self.assertEqual(len(phones), 1, "Phone number input should be present on login screen")
             genders = [sb for sb in at.selectbox if "Gender" in sb.proto.label]
             self.assertEqual(len(genders), 1, "Gender selectbox should be present on login screen")
+
+            # Test invalid phone input (< 8 digits)
+            phones[0].set_value("12345")
+            sub_btn = [b for b in at.button if "Enter Research" in b.proto.label][0]
+            sub_btn.click().run(timeout=10)
+            self.assertEqual(len(at.error), 1, "Should show error for invalid phone number")
+            self.assertFalse(at.session_state.get('logged_in', False))
+
+            # Test valid phone input
+            phones = [ti for ti in at.text_input if "Phone Number" in ti.proto.label]
+            phones[0].set_value("01712345678")
+            sub_btn = [b for b in at.button if "Enter Research" in b.proto.label][0]
+            sub_btn.click().run(timeout=10)
+            self.assertTrue(at.session_state.get('logged_in', False))
+            self.assertEqual(at.session_state.get('user_phone'), "01712345678")
         finally:
             os.environ.pop("FORCE_LOGIN_SCREEN", None)
+
+    def test_cross_module_action_button_navigation(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(self.app_path)
+        at.run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "🏠 Overview")
+
+        # Click Manage participants button
+        btn_pts = [b for b in at.button if "Manage participants" in b.proto.label][0]
+        btn_pts.click().run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "👥 Patients")
+
+        # Back to Overview
+        at.sidebar.radio[0].set_value("🏠 Overview").run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "🏠 Overview")
+
+        # Click Register a device button
+        btn_dev = [b for b in at.button if "Register a device" in b.proto.label][0]
+        btn_dev.click().run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "📱 Devices")
+
+    def test_patient_inspector_direct_screening_and_report_links(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(self.app_path)
+        at.run(timeout=15)
+
+        # Navigate to Patients
+        at.sidebar.radio[0].set_value("👥 Patients").run(timeout=15)
+
+        # Inspect TH030
+        p_inspect = [sb for sb in at.selectbox if "Select Patient to Inspect" in sb.proto.label][0]
+        p_inspect.set_value("TH030").run(timeout=10)
+
+        # Click Launch Screening
+        launch_btn = [b for b in at.button if "Launch Screening" in b.proto.label][0]
+        launch_btn.click().run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "🩺 Machine Learning")
+
+        # Verify TH030 is loaded in ML module
+        ds = [r for r in at.radio if "Select Data Source" in r.proto.label][0]
+        self.assertEqual(ds.value, "Browse Full Dataset Explorer (127 Patients)")
+        cohort_sb = [sb for sb in at.selectbox if "Cohort" in sb.proto.label][0]
+        self.assertIn("TH030", cohort_sb.value)
+
+        # Test shortcut from ML screening results to Reports
+        ml_rep_btn = [b for b in at.button if "Generate & Download PDF" in b.proto.label][0]
+        ml_rep_btn.click().run(timeout=15)
+        self.assertEqual(at.sidebar.radio[0].value, "📄 Reports")
+        rep_sb = [sb for sb in at.selectbox if "Select Patient to Generate" in sb.proto.label][0]
+        self.assertEqual(rep_sb.value, "TH030")
+
+    def test_pdf_report_with_xml_special_characters(self):
+        from src.pdf_generator import generate_patient_pdf
+        pdf_bytes = generate_patient_pdf(
+            patient_id="TH001",
+            patient_name="Test & Spec <Char> Patient",
+            age=32.0,
+            gender="Female",
+            weight="52 kg",
+            tsh_val="<0.005",
+            ft4_val=">1.8 ng/dL",
+            ref_status="Hyperthyroid & Active",
+            pred_label="Hyperthyroid",
+            prob_dict={"Normal": 0.05, "Hyperthyroid": 0.90, "Hypothyroid": 0.05},
+            model_name="ExtraTrees <v9> & Ensemble",
+            sensor_feats={
+                "tremor_amag_ratio_8_12": 0.42,
+                "tremor_amag_dom_freq": 10.5,
+                "tremor_amag_rms": 0.85,
+                "neck_mean_mm": 52.0,
+                "neck_std_mm": 0.45
+            },
+            researcher_name="Dr. Sifat & Co.",
+            researcher_phone="+8801712-345678",
+            researcher_gender="Male",
+            clinical_notes="Notes with TSH < 0.35 & FT4 > 1.8 and unclosed <tag check"
+        )
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertGreater(len(pdf_bytes), 2500)
 
 
 if __name__ == '__main__':

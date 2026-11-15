@@ -5,6 +5,7 @@ Department of Biomedical Engineering, Jashore University of Science and Technolo
 
 import io
 from datetime import datetime
+from xml.sax.saxutils import escape as xml_escape
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import (
@@ -12,6 +13,12 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+def _safe_xml(val) -> str:
+    """Safely escape text for inclusion in ReportLab XML Paragraphs."""
+    if val is None:
+        return ""
+    return xml_escape(str(val))
 
 def generate_patient_pdf(
     patient_id: str,
@@ -141,10 +148,14 @@ def generate_patient_pdf(
 
     # Metadata Strip (Report ID, Date, Researcher)
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    safe_r_name = _safe_xml(researcher_name)
+    safe_r_phone = _safe_xml(researcher_phone)
+    safe_r_gender = _safe_xml(researcher_gender)
+    safe_pid = _safe_xml(patient_id)
     meta_text = (
-        f"<b>Report ID:</b> REP-{patient_id}-{datetime.now().strftime('%Y%m%d%H%M')} &nbsp;&nbsp;|&nbsp;&nbsp; "
+        f"<b>Report ID:</b> REP-{safe_pid}-{datetime.now().strftime('%Y%m%d%H%M')} &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Generated:</b> {now_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
-        f"<b>Clinician/Researcher:</b> {researcher_name} ({researcher_phone}, {researcher_gender})"
+        f"<b>Clinician/Researcher:</b> {safe_r_name} ({safe_r_phone}, {safe_r_gender})"
     )
     story.append(Paragraph(meta_text, small_style))
     story.append(Spacer(1, 6))
@@ -153,22 +164,31 @@ def generate_patient_pdf(
     # 2. Patient Demographics & Reference Laboratory Data
     story.append(Paragraph("1. PATIENT DEMOGRAPHICS & CLINICAL LABORATORY REFERENCE", section_heading))
 
+    safe_name = _safe_xml(patient_name)
+    safe_gender = _safe_xml(gender)
+    safe_weight = _safe_xml(weight)
+    safe_tsh = _safe_xml(tsh_val)
+    safe_ft4 = _safe_xml(ft4_val)
+    safe_ref = _safe_xml(ref_status)
+
+    tsh_display = f"{safe_tsh} mIU/L" if safe_tsh and 'pending' not in str(safe_tsh).lower() else safe_tsh
+
     demo_data = [
         [
-            Paragraph("<b>Patient ID:</b>", body_style), Paragraph(str(patient_id), body_bold),
-            Paragraph("<b>Full Name:</b>", body_style), Paragraph(str(patient_name), body_bold)
+            Paragraph("<b>Patient ID:</b>", body_style), Paragraph(safe_pid, body_bold),
+            Paragraph("<b>Full Name:</b>", body_style), Paragraph(safe_name, body_bold)
         ],
         [
             Paragraph("<b>Age:</b>", body_style), Paragraph(f"{age:.0f} Years", body_style),
-            Paragraph("<b>Gender:</b>", body_style), Paragraph(str(gender), body_style)
+            Paragraph("<b>Gender:</b>", body_style), Paragraph(safe_gender, body_style)
         ],
         [
-            Paragraph("<b>Weight:</b>", body_style), Paragraph(str(weight), body_style),
-            Paragraph("<b>Clinical TSH:</b>", body_style), Paragraph(f"{tsh_val} mIU/L" if tsh_val and 'pending' not in str(tsh_val).lower() else str(tsh_val), body_bold)
+            Paragraph("<b>Weight:</b>", body_style), Paragraph(safe_weight, body_style),
+            Paragraph("<b>Clinical TSH:</b>", body_style), Paragraph(tsh_display, body_bold)
         ],
         [
-            Paragraph("<b>Serum FT4:</b>", body_style), Paragraph(str(ft4_val), body_style),
-            Paragraph("<b>Lab Benchmark Status:</b>", body_style), Paragraph(f"<b>{ref_status}</b>", body_bold)
+            Paragraph("<b>Serum FT4:</b>", body_style), Paragraph(safe_ft4, body_style),
+            Paragraph("<b>Lab Benchmark Status:</b>", body_style), Paragraph(f"<b>{safe_ref}</b>", body_bold)
         ]
     ]
     demo_table = Table(demo_data, colWidths=[110, 160, 110, 160])
@@ -259,9 +279,10 @@ def generate_patient_pdf(
     else:
         triage_text = "ELEVATED RISK &bull; Anterior neck surface / hypothyroid profile detected. Recommend clinical endocrine consult."
 
+    safe_model = _safe_xml(model_name)
     ml_data = [
         [
-            Paragraph(f"<b>Classifier Model:</b> {model_name}", body_style),
+            Paragraph(f"<b>Classifier Model:</b> {safe_model}", body_style),
             Paragraph(f"<b>Prediction:</b> <font color='{pred_color}' size='11'><b>{pred_label.upper()}</b></font>", body_bold)
         ],
         [
@@ -286,11 +307,12 @@ def generate_patient_pdf(
     # 5. Clinical Impression & Attestation
     story.append(Paragraph("4. RESEARCHER & CLINICIAN REVIEW", section_heading))
 
-    notes_disp = clinical_notes if clinical_notes.strip() else "Sensor recordings and ML inference reviewed. Findings are consistent with preliminary non-invasive screening protocol."
+    raw_notes = clinical_notes if clinical_notes.strip() else "Sensor recordings and ML inference reviewed. Findings are consistent with preliminary non-invasive screening protocol."
+    safe_notes = _safe_xml(raw_notes)
 
     review_data = [
         [
-            Paragraph(f"<b>Researcher Impression / Clinical Notes:</b><br/>{notes_disp}", body_style)
+            Paragraph(f"<b>Researcher Impression / Clinical Notes:</b><br/>{safe_notes}", body_style)
         ]
     ]
     review_table = Table(review_data, colWidths=[540])
