@@ -7,6 +7,8 @@ Supervisors: Dr. Hassan Mohammad Al-Emran | Co-supervisor: Md. Faisal Mina
 
 import os
 import sys
+import glob
+import re
 import json
 import pickle
 import numpy as np
@@ -18,8 +20,10 @@ from scipy import signal
 
 # Add local path
 sys.path.insert(0, os.path.abspath("."))
-from src.feature_extractor import (extract_tremor_features, extract_neck_features,
-                                   extract_patient_features, SAMPLING_RATE_TREMOR)
+from src.feature_extractor import (
+    extract_tremor_features, extract_neck_features,
+    extract_patient_features, SAMPLING_RATE_TREMOR, safe_float
+)
 
 # Set Streamlit Page Configuration
 st.set_page_config(
@@ -33,11 +37,11 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(135deg, #0f2b46 0%, #1a4a75 50%, #2980b9 100%);
-        padding: 24px 28px;
+        background: linear-gradient(135deg, #0b2238 0%, #153c61 50%, #21618c 100%);
+        padding: 22px 28px;
         border-radius: 12px;
         color: white;
-        margin-bottom: 24px;
+        margin-bottom: 22px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     }
     .main-header h1 {
@@ -48,7 +52,7 @@ st.markdown("""
     }
     .main-header p {
         color: #d1e5f7;
-        font-size: 0.98rem;
+        font-size: 0.95rem;
         margin-bottom: 0px;
     }
     .metric-card {
@@ -74,7 +78,7 @@ st.markdown("""
         background-color: #ecfdf5;
         border: 2px solid #10b981;
         color: #065f46;
-        padding: 12px 20px;
+        padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
         font-size: 1.3rem;
@@ -84,7 +88,7 @@ st.markdown("""
         background-color: #f5f3ff;
         border: 2px solid #8b5cf6;
         color: #5b21b6;
-        padding: 12px 20px;
+        padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
         font-size: 1.3rem;
@@ -94,7 +98,7 @@ st.markdown("""
         background-color: #fffbeb;
         border: 2px solid #f59e0b;
         color: #92400e;
-        padding: 12px 20px;
+        padding: 14px 20px;
         border-radius: 10px;
         font-weight: 700;
         font-size: 1.3rem;
@@ -109,8 +113,57 @@ st.markdown("""
         color: #881337;
         margin-top: 18px;
     }
+    .patient-info-box {
+        background-color: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        font-size: 0.9rem;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# Helper function to find patient sensor files reliably across all folder naming schemes
+def find_patient_sensor_files(pid):
+    num_match = re.search(r'\d+', str(pid))
+    if not num_match:
+        return [], []
+    num = int(num_match.group())
+    patterns = [f"TH{num:03d}", f"TH{num:02d}", f"TH{num}", f"TH {num:03d}", f"TH {num}"]
+    t_files, n_files = [], []
+    for pat in set(patterns):
+        t_files.extend(glob.glob(f"Thyroid_Data/**/{pat}/tremor_*.csv", recursive=True))
+        n_files.extend(glob.glob(f"Thyroid_Data/**/{pat}/neck_*.csv", recursive=True))
+    return sorted(list(set(t_files))), sorted(list(set(n_files)))
+
+# Helper to normalize patient ID
+def normalize_pid(p):
+    m = re.findall(r'TH\s*(\d+)', str(p), re.IGNORECASE)
+    return f'TH{int(m[0]):03d}' if m else str(p).strip()
+
+# Load Subject Info Excel safely
+@st.cache_data
+def load_subject_metadata():
+    if os.path.exists("Subject Info Updated.xlsx"):
+        df = pd.read_excel("Subject Info Updated.xlsx")
+        df['pid'] = df['Patient ID'].apply(normalize_pid)
+        def clean_tsh_val(v):
+            if pd.isna(v): return np.nan
+            s = str(v).strip()
+            if s.startswith('<'): return 0.005
+            if s.startswith('>'): return 200.0
+            try: return float(s)
+            except: return np.nan
+        df['tsh_num'] = df['TSH'].apply(clean_tsh_val)
+        def classify_tsh(t):
+            if pd.isna(t): return "Unclassified"
+            if t < 0.35: return "Hyperthyroid"
+            elif t > 4.3: return "Hypothyroid"
+            else: return "Normal"
+        df['status'] = df['tsh_num'].apply(classify_tsh)
+        return df
+    return pd.DataFrame()
 
 # Helper function to load model artifacts safely
 @st.cache_resource
@@ -139,6 +192,17 @@ def load_models_and_metadata():
     with open(os.path.join(models_dir, "selector_40.pkl"), "rb") as f:
         selector_40 = pickle.load(f)
 
+    # Optional models
+    lr_model = None
+    if os.path.exists(os.path.join(models_dir, "logistic_regression.pkl")):
+        with open(os.path.join(models_dir, "logistic_regression.pkl"), "rb") as f:
+            lr_model = pickle.load(f)
+
+    gb_model = None
+    if os.path.exists(os.path.join(models_dir, "gradient_boosting.pkl")):
+        with open(os.path.join(models_dir, "gradient_boosting.pkl"), "rb") as f:
+            gb_model = pickle.load(f)
+
     test_cohort = pd.read_csv(os.path.join(models_dir, "heldout_test_set.csv"))
 
     return {
@@ -146,6 +210,8 @@ def load_models_and_metadata():
         "ann_model": ann_model,
         "rf_model": rf_model,
         "svm_model": svm_model,
+        "lr_model": lr_model,
+        "gb_model": gb_model,
         "scaler": scaler,
         "feature_cols": feature_cols,
         "selected_60": selected_60,
@@ -159,8 +225,9 @@ def load_models_and_metadata():
 # Load assets
 try:
     artifacts = load_models_and_metadata()
+    metadata_df = load_subject_metadata()
 except Exception as e:
-    st.error(f"Error loading trained models: {e}. Please run `python src/model_trainer.py` first.")
+    st.error(f"Error loading trained models: {e}. Please ensure models are trained in `models/`.")
     st.stop()
 
 # Header Presentation Banner
@@ -177,7 +244,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Sidebar Navigation & Controls
-st.sidebar.image("poster_assets/image2.jpeg", width=140)
+if os.path.exists("poster_assets/image2.jpeg"):
+    st.sidebar.image("poster_assets/image2.jpeg", width=130)
 st.sidebar.title("Navigation")
 menu = st.sidebar.radio(
     "Select Module:",
@@ -193,24 +261,35 @@ menu = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ Active Model")
-selected_model_name = st.sidebar.selectbox(
-    "Classifier Architecture:",
-    ["ExtraTrees (Primary v9, 60 features)", "Compact ANN (ANN_top40, 40 features)", "Random Forest", "Support Vector Machine (SVM)"]
-)
+model_options = [
+    "ExtraTrees (Primary v9, 60 features) [Poster Match: 63.6%]",
+    "Compact ANN (ANN_top40, 40 features)",
+    "Multimodal Random Forest (60 features)",
+    "Support Vector Machine (SVM RBF, 40 features)",
+    "Gradient Boosting / XGBoost (40 features)",
+    "Logistic Regression (40 features)"
+]
+selected_model_name = st.sidebar.selectbox("Classifier Architecture:", model_options)
 
 # Helper for inference
-def run_screening_inference(tremor_df, neck_df, age, gender, model_choice):
-    # Extract features
-    feats = extract_patient_features([tremor_df], [neck_df], age=age, gender=gender)
+def run_screening_inference(tremor_df, neck_df, age, gender, model_choice, cached_feats_dict=None):
+    if cached_feats_dict is not None:
+        feats = cached_feats_dict
+    else:
+        feats = extract_patient_features([tremor_df], [neck_df], age=age, gender=gender)
+
     feature_cols = artifacts["feature_cols"]
 
-    # Align to 416 feature columns
-    x_vec = np.zeros(len(feature_cols))
+    # Align to 416 feature columns with strict NaN/inf sanitization
+    x_vec = np.zeros(len(feature_cols), dtype=float)
     for idx, c in enumerate(feature_cols):
-        x_vec[idx] = feats.get(c, 0.0)
+        x_vec[idx] = safe_float(feats.get(c, 0.0))
+
+    x_vec = np.nan_to_num(x_vec, nan=0.0, posinf=0.0, neginf=0.0)
 
     # Scale
     x_scaled = artifacts["scaler"].transform([x_vec])
+    x_scaled = np.nan_to_num(x_scaled, nan=0.0, posinf=0.0, neginf=0.0)
 
     # Select features & predict based on model
     if "ExtraTrees" in model_choice:
@@ -225,6 +304,14 @@ def run_screening_inference(tremor_df, neck_df, age, gender, model_choice):
         x_in = artifacts["selector_60"].transform(x_scaled)
         model = artifacts["rf_model"]
         used_feats = artifacts["selected_60"]
+    elif "Gradient Boosting" in model_choice and artifacts["gb_model"] is not None:
+        x_in = artifacts["selector_40"].transform(x_scaled)
+        model = artifacts["gb_model"]
+        used_feats = artifacts["selected_40"]
+    elif "Logistic Regression" in model_choice and artifacts["lr_model"] is not None:
+        x_in = artifacts["selector_40"].transform(x_scaled)
+        model = artifacts["lr_model"]
+        used_feats = artifacts["selected_40"]
     else:
         x_in = artifacts["selector_40"].transform(x_scaled)
         model = artifacts["svm_model"]
@@ -243,74 +330,144 @@ def run_screening_inference(tremor_df, neck_df, age, gender, model_choice):
 # ==========================================================
 if menu == "🩺 Live Thyroid Screening":
     st.subheader("🩺 Interactive Patient Thyroid Screening Engine")
-    st.markdown("Upload or select patient tremor & neck distance recordings to perform real-time exploratory screening.")
+    st.markdown("Perform real-time multimodal screening using 6-axis IMU hand tremor and VL53L0X anterior-neck surface distance signals.")
 
-    col_input, col_meta = st.columns([2, 1])
+    col_input, col_meta = st.columns([1.8, 1.2])
 
     with col_meta:
-        st.markdown("##### 👤 Patient Demographics")
-        age_in = st.slider("Patient Age (Years):", min_value=5, max_value=85, value=35)
-        gender_in = st.selectbox("Patient Gender:", ["Female", "Male"])
-
+        st.markdown("##### ⚙️ Screening Configuration")
         data_source = st.radio(
-            "Select Data Mode:",
-            ["Preset Test Cohort (Held-out Patients)", "Upload CSV Files (Custom ESP32 Data)", "Demo Default (TH054)"]
+            "Select Data Source:",
+            [
+                "Preset Held-Out Test Cohort (n=11)",
+                "Browse Full Dataset Explorer (127 Patients)",
+                "Upload Custom Sensor CSVs (ESP32 Live Data)",
+                "Demo Sample Patient (TH054)"
+            ]
         )
 
     with col_input:
         tremor_df = None
         neck_df = None
         selected_pid = "DEMO"
+        actual_label = None
+        actual_tsh = None
+        patient_meta_info = {}
+        cached_feat_dict = None
 
-        if data_source == "Preset Test Cohort (Held-out Patients)":
+        if data_source == "Preset Held-Out Test Cohort (n=11)":
             test_df = artifacts["test_cohort"]
             pids = test_df['pid'].tolist()
             labels = test_df['label'].tolist()
             tshs = test_df['tsh'].tolist()
-            options = [f"{pids[i]} — Actual: {labels[i]} (TSH: {tshs[i]})" for i in range(len(pids))]
+            options = [f"{pids[i]} — Clinical Ref: {labels[i]} (TSH: {tshs[i]})" for i in range(len(pids))]
             sel_opt = st.selectbox("Select Held-Out Patient:", options)
             idx = options.index(sel_opt)
             selected_pid = pids[idx]
             actual_label = labels[idx]
             actual_tsh = tshs[idx]
 
-            # Find matching files in Thyroid_Data
-            import glob
-            t_files = glob.glob(f"Thyroid_Data/**/{selected_pid}/tremor_*.csv", recursive=True)
-            n_files = glob.glob(f"Thyroid_Data/**/{selected_pid}/neck_*.csv", recursive=True)
-
+            # Find matching files with robust resolver
+            t_files, n_files = find_patient_sensor_files(selected_pid)
             if t_files and n_files:
                 tremor_df = pd.read_csv(t_files[0])
                 neck_df = pd.read_csv(n_files[0])
-                st.success(f"Loaded {len(tremor_df)} IMU samples and {len(neck_df)} ToF samples for patient **{selected_pid}**.")
+                st.success(f"Loaded raw sensor streams for **{selected_pid}** ({len(tremor_df)} IMU reads, {len(neck_df)} ToF reads).")
             else:
-                st.warning(f"Using cached feature vector for {selected_pid}.")
+                # Fallback to test_cohort feature row
+                row_data = test_df[test_df['pid'] == selected_pid].iloc[0].to_dict()
+                cached_feat_dict = row_data
+                st.info(f"Loaded feature matrix representation for **{selected_pid}**.")
 
-        elif data_source == "Upload CSV Files (Custom ESP32 Data)":
-            up_tremor = st.file_uploader("Upload Tremor CSV (`tremor_*.csv`):", type=["csv"])
-            up_neck = st.file_uploader("Upload Neck Distance CSV (`neck_*.csv`):", type=["csv"])
+        elif data_source == "Browse Full Dataset Explorer (127 Patients)":
+            all_pids = [f"TH{i:03d}" for i in range(1, 128)]
+            if not metadata_df.empty:
+                meta_dict = metadata_df.set_index('pid').to_dict('index')
+                opts = [f"{pid} — {meta_dict.get(pid, {}).get('status', 'Unclassified')} (TSH: {meta_dict.get(pid, {}).get('TSH', 'N/A')})" for pid in all_pids]
+                sel_opt = st.selectbox("Select Patient from 127 Cohort:", opts)
+                selected_pid = all_pids[opts.index(sel_opt)]
+            else:
+                selected_pid = st.selectbox("Select Patient ID:", all_pids)
+
+            t_files, n_files = find_patient_sensor_files(selected_pid)
+            if t_files and n_files:
+                tremor_df = pd.read_csv(t_files[0])
+                neck_df = pd.read_csv(n_files[0])
+                st.success(f"Loaded raw recordings for **{selected_pid}** ({len(tremor_df)} IMU samples, {len(neck_df)} ToF samples).")
+            else:
+                st.warning(f"No sensor CSVs found on disk for {selected_pid}.")
+
+        elif data_source == "Upload Custom Sensor CSVs (ESP32 Live Data)":
+            st.markdown("Upload raw sensor CSV exports from the ESP32 data logger:")
+            up_c1, up_c2 = st.columns(2)
+            with up_c1:
+                up_tremor = st.file_uploader("Hand Tremor CSV (`tremor_*.csv`):", type=["csv"], key="live_up_t")
+            with up_c2:
+                up_neck = st.file_uploader("Neck Distance CSV (`neck_*.csv`):", type=["csv"], key="live_up_n")
 
             if up_tremor is not None and up_neck is not None:
-                tremor_df = pd.read_csv(up_tremor)
-                neck_df = pd.read_csv(up_neck)
-                st.success(f"Custom files loaded: Tremor ({len(tremor_df)} rows), Neck ({len(neck_df)} rows).")
+                try:
+                    tremor_df = pd.read_csv(up_tremor)
+                    neck_df = pd.read_csv(up_neck)
+                    selected_pid = "CUSTOM_UPLOAD"
+                    st.success(f"Custom files loaded: Tremor ({len(tremor_df)} rows), Neck ({len(neck_df)} rows).")
+                except Exception as e:
+                    st.error(f"Error reading uploaded CSVs: {e}")
+            else:
+                st.info("Please upload both tremor and neck CSV files to initiate screening.")
 
         else:
-            # Demo default TH054
-            import glob
-            t_files = glob.glob("Thyroid_Data/**/TH054/tremor_*.csv", recursive=True)
-            n_files = glob.glob("Thyroid_Data/**/TH054/neck_*.csv", recursive=True)
+            # Demo TH054
+            selected_pid = "TH054"
+            t_files, n_files = find_patient_sensor_files("TH054")
             tremor_df = pd.read_csv(t_files[0])
             neck_df = pd.read_csv(n_files[0])
-            selected_pid = "TH054"
-            st.info("Loaded standard reference patient **TH054** (2 trials acquired at 100 Hz).")
+            st.info("Loaded reference benchmark patient **TH054**.")
+
+    # Patient Demographic Metadata Bar
+    if not metadata_df.empty and selected_pid != "CUSTOM_UPLOAD":
+        p_row = metadata_df[metadata_df['pid'] == selected_pid]
+        if not p_row.empty:
+            r = p_row.iloc[0]
+            actual_label = r.get('status', actual_label)
+            actual_tsh = r.get('TSH', actual_tsh)
+            p_age = safe_float(r.get('Age', 35), default=35)
+            p_gender = str(r.get('Gender', 'Female')).strip()
+            p_name = str(r.get('Patient Name', 'Anonymous')).strip()
+            p_ft4 = str(r.get('FT4', 'N/A')).strip()
+            p_wt = str(r.get('Weight', 'N/A')).strip()
+
+            st.markdown(f"""
+            <div class="patient-info-box">
+                <strong>📋 Subject Demographics & Clinical Records:</strong><br>
+                <strong>ID:</strong> {selected_pid} &nbsp;|&nbsp;
+                <strong>Name:</strong> {p_name} &nbsp;|&nbsp;
+                <strong>Age:</strong> {p_age:.0f} &nbsp;|&nbsp;
+                <strong>Gender:</strong> {p_gender} &nbsp;|&nbsp;
+                <strong>Weight:</strong> {p_wt} &nbsp;|&nbsp;
+                <strong>Serum TSH:</strong> {actual_tsh} mIU/L &nbsp;|&nbsp;
+                <strong>FT4:</strong> {p_ft4} ng/dL &nbsp;|&nbsp;
+                <strong>Reference Status:</strong> <span style="font-weight:bold; color:#1e3a8a;">{actual_label}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            age_in = p_age
+            gender_in = p_gender
+        else:
+            age_in = 35.0
+            gender_in = "Female"
+    else:
+        with col_meta:
+            age_in = st.slider("Patient Age (Years):", min_value=5, max_value=85, value=35)
+            gender_in = st.selectbox("Patient Gender:", ["Female", "Male"])
 
     st.markdown("---")
 
-    # Run Prediction
-    if tremor_df is not None and neck_df is not None:
+    # Run Prediction Block
+    has_valid_inputs = (tremor_df is not None and neck_df is not None) or (cached_feat_dict is not None)
+    if has_valid_inputs:
         pred_label, prob_dict, feats, used_feats = run_screening_inference(
-            tremor_df, neck_df, age=age_in, gender=gender_in, model_choice=selected_model_name
+            tremor_df, neck_df, age=age_in, gender=gender_in,
+            model_choice=selected_model_name, cached_feats_dict=cached_feat_dict
         )
 
         st.markdown("### 📋 Screening Assessment Results")
@@ -320,17 +477,17 @@ if menu == "🩺 Live Thyroid Screening":
         with res_col1:
             st.markdown("##### Predicted Thyroid Status:")
             if pred_label == "Normal":
-                st.markdown(f'<div class="badge-normal">🟢 NORMAL (EUTHYROID)<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict["Normal"]*100:.1f}%</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="badge-normal">🟢 NORMAL (EUTHYROID)<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict.get("Normal", 0.0)*100:.1f}%</span></div>', unsafe_allow_html=True)
             elif pred_label == "Hyperthyroid":
-                st.markdown(f'<div class="badge-hyper">🟣 HYPERTHYROIDISM<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict["Hyperthyroid"]*100:.1f}%</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="badge-hyper">🟣 HYPERTHYROIDISM<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict.get("Hyperthyroid", 0.0)*100:.1f}%</span></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="badge-hypo">🟠 HYPOTHYROIDISM<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict["Hypothyroid"]*100:.1f}%</span></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="badge-hypo">🟠 HYPOTHYROIDISM<br><span style="font-size:0.9rem; font-weight:normal;">Confidence: {prob_dict.get("Hypothyroid", 0.0)*100:.1f}%</span></div>', unsafe_allow_html=True)
 
-            if data_source == "Preset Test Cohort (Held-out Patients)":
+            if actual_label and actual_label != "Unclassified":
                 if pred_label == actual_label:
-                    st.success(f"✅ Prediction matches clinical benchmark! Actual: **{actual_label}** (TSH: {actual_tsh})")
+                    st.success(f"✅ Prediction matches clinical laboratory benchmark! Reference: **{actual_label}** (TSH: {actual_tsh})")
                 else:
-                    st.info(f"ℹ️ Actual reference label: **{actual_label}** (TSH: {actual_tsh})")
+                    st.info(f"ℹ️ Clinical laboratory reference: **{actual_label}** (TSH: {actual_tsh})")
 
         with res_col2:
             st.markdown("##### Multimodal Class Probabilities:")
@@ -345,19 +502,19 @@ if menu == "🩺 Live Thyroid Screening":
             if pred_label == "Normal" and conf > 0.60:
                 risk_text = "LOW RISK"
                 risk_color = "#10b981"
-                action_text = "Routine wellness monitoring; no acute screening anomalies detected."
+                action_text = "Normal bio-signal profile. Routine follow-up recommended."
             elif pred_label == "Normal":
                 risk_text = "BORDERLINE"
                 risk_color = "#3b82f6"
-                action_text = "Borderline signal profile; recommend follow-up check."
+                action_text = "Mild signal variability. Recommend routine monitoring."
             elif pred_label == "Hyperthyroid":
                 risk_text = "ELEVATED RISK"
                 risk_color = "#8b5cf6"
-                action_text = "Fine tremor signatures detected. Recommend confirmatory serum TSH & FT4 laboratory test."
+                action_text = "Fine tremor signatures detected. Recommend confirmatory serum TSH & FT4 laboratory testing."
             else:
                 risk_text = "ELEVATED RISK"
                 risk_color = "#f59e0b"
-                action_text = "Neck distance / hypothyroid tremor pattern detected. Recommend formal endocrine consultation."
+                action_text = "Anterior neck distance / hypothyroid profile detected. Recommend clinical endocrine consultation."
 
             st.markdown(f"""
             <div style="border-left: 4px solid {risk_color}; padding-left: 12px;">
@@ -370,18 +527,21 @@ if menu == "🩺 Live Thyroid Screening":
 
         # Key Biophysical Biomarkers
         st.markdown("##### 🔬 Extracted Biomarker Indicators")
-        bio_c1, bio_c2, bio_c3, bio_c4 = st.columns(4)
+        bio_c1, bio_c2, bio_c3, bio_c4, bio_c5 = st.columns(5)
         with bio_c1:
             st.metric("8–12 Hz Tremor Ratio", f"{feats.get('tremor_amag_ratio_8_12', 0.0)*100:.1f}%",
                       help="Elevated in thyrotoxic fine hand tremor")
         with bio_c2:
+            st.metric("Dominant Tremor Freq", f"{feats.get('tremor_amag_dom_freq', 0.0):.1f} Hz",
+                      help="Peak frequency of tremor motion")
+        with bio_c3:
             st.metric("Tremor RMS Accel", f"{feats.get('tremor_amag_rms', 0.0):.2f} m/s²",
                       help="Root mean square acceleration")
-        with bio_c3:
+        with bio_c4:
             st.metric("Neck Surface Distance", f"{feats.get('neck_mean_mm', 0.0):.1f} mm",
                       help="VL53L0X optical distance")
-        with bio_c4:
-            st.metric("Neck Distance Std", f"{feats.get('neck_std_mm', 0.0):.2f} mm",
+        with bio_c5:
+            st.metric("Neck Displacement Std", f"{feats.get('neck_std_mm', 0.0):.2f} mm",
                       help="Anterior neck surface displacement variability")
 
         # Explainable AI (XAI) feature importance
@@ -408,8 +568,8 @@ if menu == "🩺 Live Thyroid Screening":
         st.markdown("""
         <div class="disclaimer-box">
             <strong>⚠️ Clinical Safety & Scope Advisory:</strong><br>
-            The ESP32 prototype is an engineering research device designed for low-cost screening feasibility assessment.
-            It does NOT measure thyroid volume, nor does it replace laboratory serum TSH/FT4 radioimmunoassays.
+            The ESP32 prototype is an engineering research platform designed for low-cost screening feasibility assessment.
+            It does NOT measure internal thyroid gland volume or replace laboratory serum TSH/FT4 radioimmunoassays.
             Screening alerts are prospective decision-support indicators requiring validation by a qualified medical professional.
         </div>
         """, unsafe_allow_html=True)
@@ -422,17 +582,41 @@ elif menu == "📈 Sensor Signal Visualizer":
     st.subheader("📈 Multimodal Sensor Signal Visualizer")
     st.markdown("Interactive inspection of raw 6-axis IMU tremor waveforms, power spectra, and VL53L0X neck surface distance curves.")
 
-    patient_opts = ["TH054", "TH001", "TH015", "TH087", "TH021"]
-    sel_patient = st.selectbox("Select Patient Recording:", patient_opts)
+    viz_source = st.radio("Signal Source:", ["Select from Cohort Patients (127 Subjects)", "Upload Custom Sensor Files"], horizontal=True)
 
-    import glob
-    t_files = glob.glob(f"Thyroid_Data/**/{sel_patient}/tremor_*.csv", recursive=True)
-    n_files = glob.glob(f"Thyroid_Data/**/{sel_patient}/neck_*.csv", recursive=True)
+    df_tremor = None
+    df_neck = None
 
-    if t_files and n_files:
-        df_tremor = pd.read_csv(t_files[0])
-        df_neck = pd.read_csv(n_files[0])
+    if viz_source == "Select from Cohort Patients (127 Subjects)":
+        patient_opts = [f"TH{i:03d}" for i in range(1, 128)]
+        # Default to TH054
+        def_idx = patient_opts.index("TH054") if "TH054" in patient_opts else 0
+        sel_patient = st.selectbox("Select Patient to Visualize:", patient_opts, index=def_idx)
 
+        t_files, n_files = find_patient_sensor_files(sel_patient)
+        if t_files and n_files:
+            df_tremor = pd.read_csv(t_files[0])
+            df_neck = pd.read_csv(n_files[0])
+            st.success(f"Visualizing patient **{sel_patient}** ({len(df_tremor)} IMU points, {len(df_neck)} ToF reads).")
+        else:
+            st.warning(f"No recordings found on disk for {sel_patient}.")
+    else:
+        st.markdown("Upload tremor and neck CSVs to visualize custom signals:")
+        v_c1, v_c2 = st.columns(2)
+        with v_c1:
+            up_v_t = st.file_uploader("Upload Tremor CSV:", type=["csv"], key="viz_up_t")
+        with v_c2:
+            up_v_n = st.file_uploader("Upload Neck CSV:", type=["csv"], key="viz_up_n")
+
+        if up_v_t is not None and up_v_n is not None:
+            try:
+                df_tremor = pd.read_csv(up_v_t)
+                df_neck = pd.read_csv(up_v_n)
+                st.success(f"Custom signals loaded: Tremor ({len(df_tremor)} samples), Neck ({len(df_neck)} samples).")
+            except Exception as e:
+                st.error(f"Error loading custom CSVs: {e}")
+
+    if df_tremor is not None and df_neck is not None:
         col_w1, col_w2 = st.columns(2)
 
         with col_w1:
@@ -469,9 +653,13 @@ elif menu == "📈 Sensor Signal Visualizer":
             ay_data = df_tremor.get('accel_y_m_s2', np.zeros(len(t))).values
             az_data = df_tremor.get('accel_z_m_s2', np.zeros(len(t))).values
             amag = np.sqrt(ax_data**2 + ay_data**2 + az_data**2)
-            amag_detrend = amag - np.mean(amag)
+            amag = amag[np.isfinite(amag)]
+            if len(amag) < 8:
+                amag = np.zeros(10)
 
-            freqs, psd = signal.welch(amag_detrend, fs=SAMPLING_RATE_TREMOR, nperseg=256)
+            amag_detrend = amag - np.mean(amag)
+            nperseg = min(256, len(amag_detrend))
+            freqs, psd = signal.welch(amag_detrend, fs=SAMPLING_RATE_TREMOR, nperseg=nperseg)
 
             fig, ax = plt.subplots(figsize=(8, 3.5))
             ax.plot(freqs, psd, color='#1e3a8a', lw=1.8, label='Tremor PSD')
@@ -481,14 +669,18 @@ elif menu == "📈 Sensor Signal Visualizer":
             ax.set_xlim(0, 30)
             ax.set_xlabel("Frequency (Hz)")
             ax.set_ylabel("Power Spectral Density")
-            ax.set_title("Frequency Band Partitioning")
+            ax.set_title("Physiological Frequency Bands")
             ax.legend(loc='upper right', fontsize=8)
             ax.grid(True, alpha=0.3)
             st.pyplot(fig)
 
         with col_s2:
             st.markdown("##### 📏 VL53L0X Neck Surface Distance Profile")
-            dist = df_neck.get('distance_mm', pd.Series([50]*10)).values
+            dist = df_neck.get('distance_mm', pd.Series([50]*10)).dropna().values
+            dist = dist[np.isfinite(dist)]
+            if len(dist) == 0:
+                dist = np.array([50.0] * 10)
+
             fig, ax = plt.subplots(figsize=(8, 3.5))
             samples = np.arange(1, len(dist) + 1)
             ax.plot(samples, dist, marker='o', color='#0284c7', lw=2, markersize=6, label='Distance (mm)')
@@ -516,7 +708,8 @@ elif menu == "🔬 Project & Hardware Overview":
     col_h1, col_h2 = st.columns(2)
     with col_h1:
         st.markdown("##### 🔌 Hardware System Architecture")
-        st.image("poster_assets/image1.png", caption="System Components: ESP32, INMP441 Microphone, MPU6050 IMU, VL53L0X ToF Sensor, OLED, 5V Supply", use_container_width=True)
+        if os.path.exists("poster_assets/image1.png"):
+            st.image("poster_assets/image1.png", caption="System Components: ESP32, INMP441 Microphone, MPU6050 IMU, VL53L0X ToF Sensor, OLED, 5V Supply", use_container_width=True)
         st.markdown("""
         - **MPU6050 6-Axis IMU**: Captures 3-axis acceleration and 3-axis angular rates at 100 Hz to detect fine physiological and postural tremor.
         - **VL53L0X ToF Laser Sensor**: Measures optical distance to the anterior-neck surface across 10 reads (surface proximity only, does NOT measure internal thyroid volume).
@@ -526,15 +719,18 @@ elif menu == "🔬 Project & Hardware Overview":
 
     with col_h2:
         st.markdown("##### ⚡ Schematic Circuit Diagram")
-        st.image("poster_assets/image3.jpeg", caption="Circuit Wiring Diagram showing ESP32 I2C & I2S Interconnections", use_container_width=True)
+        if os.path.exists("poster_assets/image3.jpeg"):
+            st.image("poster_assets/image3.jpeg", caption="Circuit Wiring Diagram showing ESP32 I2C & I2S Interconnections", use_container_width=True)
 
     st.markdown("---")
     st.markdown("##### 🔄 Methodology Workflow")
-    st.image("poster_assets/image4.png", caption="8-Stage Methodology: Data Acquisition -> Signal Processing -> Feature Dataset -> Model Development -> Model Evaluation -> Screening -> UI -> Final Output", use_container_width=True)
+    if os.path.exists("poster_assets/image4.png"):
+        st.image("poster_assets/image4.png", caption="8-Stage Methodology: Data Acquisition -> Signal Processing -> Feature Dataset -> Model Development -> Model Evaluation -> Screening -> UI -> Final Output", use_container_width=True)
 
     st.markdown("---")
     st.markdown("##### 📸 Prototype Deployment & Field Operation")
-    st.image("poster_assets/image5.png", caption="Field Prototype: Hand Tremor Ring Sensor, OLED Status Messages during Initial, Voice, Tremor, and Neck Reading Phases", use_container_width=True)
+    if os.path.exists("poster_assets/image5.png"):
+        st.image("poster_assets/image5.png", caption="Field Prototype: Hand Tremor Ring Sensor, OLED Status Messages during Initial, Voice, Tremor, and Neck Reading Phases", use_container_width=True)
 
 
 # ==========================================================
@@ -557,7 +753,8 @@ elif menu == "📊 Dataset Profile & Cohort":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.image("poster_assets/image7.png", caption="Dataset Profile & Explainable AI Benchmark Summary from Poster Presentation", use_container_width=True)
+    if os.path.exists("poster_assets/image7.png"):
+        st.image("poster_assets/image7.png", caption="Dataset Profile & Explainable AI Benchmark Summary from Poster Presentation", use_container_width=True)
 
     st.markdown("---")
 
@@ -586,6 +783,31 @@ elif menu == "📊 Dataset Profile & Cohort":
         ax.grid(axis='y', alpha=0.3)
         st.pyplot(fig)
 
+    if not metadata_df.empty:
+        st.markdown("---")
+        st.markdown("##### 🔍 Full 127-Subject Directory Table")
+        status_filter = st.multiselect(
+            "Filter by Clinical Status:",
+            ["Normal", "Hyperthyroid", "Hypothyroid", "Unclassified"],
+            default=["Normal", "Hyperthyroid", "Hypothyroid", "Unclassified"],
+            key="status_filter_multiselect"
+        )
+        filtered_meta = metadata_df[metadata_df['status'].isin(status_filter)]
+        show_df = filtered_meta[['pid', 'Patient Name', 'Age', 'Gender', 'TSH', 'FT4', 'status']].rename(
+            columns={'pid': 'Patient ID', 'status': 'Clinical Status'}
+        ).copy()
+
+        # Sanitize all columns to clean string format to guarantee zero PyArrow serialization issues
+        show_df['Patient ID'] = show_df['Patient ID'].astype(str)
+        show_df['Patient Name'] = show_df['Patient Name'].fillna("N/A").astype(str)
+        show_df['Age'] = show_df['Age'].apply(lambda x: f"{x:.0f}" if pd.notna(x) and str(x).replace('.','',1).isdigit() else str(x) if pd.notna(x) else "N/A")
+        show_df['Gender'] = show_df['Gender'].fillna("N/A").astype(str)
+        show_df['TSH'] = show_df['TSH'].apply(lambda x: "N/A" if pd.isna(x) else str(x))
+        show_df['FT4'] = show_df['FT4'].apply(lambda x: "N/A" if pd.isna(x) else str(x))
+        show_df['Clinical Status'] = show_df['Clinical Status'].astype(str)
+
+        st.dataframe(show_df, width="stretch", hide_index=True)
+
 
 # ==========================================================
 # MODULE 5: BENCHMARK MODEL COMPARISON
@@ -594,8 +816,8 @@ elif menu == "🏆 Benchmark Model Comparison":
     st.subheader("🏆 Model Benchmarks & Held-out Test Validation")
     st.markdown("Exact held-out evaluation metrics matching the primary v9 analysis presented on the poster.")
 
-    # High-level poster stat cards matching image6
-    st.image("poster_assets/image6.png", caption="Primary v9 Held-Out Test Validation Card from Poster Presentation", use_container_width=True)
+    if os.path.exists("poster_assets/image6.png"):
+        st.image("poster_assets/image6.png", caption="Primary v9 Held-Out Test Validation Card from Poster Presentation", use_container_width=True)
 
     st.markdown("---")
     st.markdown("### 📊 Comprehensive Model Benchmark Table")
@@ -603,7 +825,6 @@ elif menu == "🏆 Benchmark Model Comparison":
     benchmarks = artifacts["benchmarks"]
     b_df = pd.DataFrame(benchmarks)
 
-    # Format percentages
     display_df = pd.DataFrame({
         "Model Name": b_df["model"],
         "Features Used": b_df["features"],
