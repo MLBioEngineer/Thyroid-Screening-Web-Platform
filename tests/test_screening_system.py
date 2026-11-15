@@ -236,6 +236,42 @@ class TestInteractiveWebUI(unittest.TestCase):
         badges = [m.value for m in at.markdown if "badge-" in m.value]
         self.assertGreater(len(badges), 0, "No screening badges rendered for TH030!")
 
+    def test_custom_upload_ui_selection(self):
+        from streamlit.testing.v1 import AppTest
+        at = AppTest.from_file(self.app_path)
+        at.run(timeout=15)
+        ds_radio = [r for r in at.radio if "Select Data Source" in r.proto.label][0]
+        ds_radio.set_value("Upload Custom Sensor CSVs (ESP32 Live Data)").run(timeout=10)
+        self.assertEqual(len(at.exception), 0)
+        # Demographic controls (age slider and gender selectbox) should be present
+        sliders = [s for s in at.slider if "Age" in s.proto.label]
+        self.assertEqual(len(sliders), 1, "Age slider should be rendered for custom upload")
+
+    def test_custom_sensor_upload_aliased_columns_and_inference(self):
+        from app import run_screening_inference
+        # DataFrame using shorthand column aliases
+        custom_tremor = pd.DataFrame({
+            'ax': np.random.randn(200) * 0.5,
+            'ay': np.random.randn(200) * 0.5,
+            'az': 9.8 + np.random.randn(200) * 0.2,
+            'gx': np.random.randn(200) * 0.05,
+            'gy': np.random.randn(200) * 0.05,
+            'gz': np.random.randn(200) * 0.05,
+            'measurement_status': [' ok '] * 200
+        })
+        custom_neck = pd.DataFrame({
+            'distance': [48.5, 49.0, 48.8, 49.2, 48.6] * 2,
+            'surface_condition': ['T'] * 10
+        })
+        pred, probs, feats, used = run_screening_inference(
+            custom_tremor, custom_neck, age=42, gender="Male",
+            model_choice="ExtraTrees (Primary v9, 60 features) [Poster Match: 63.6%]"
+        )
+        self.assertIn(pred, ['Normal', 'Hyperthyroid', 'Hypothyroid'])
+        self.assertAlmostEqual(sum(probs.values()), 1.0, places=5)
+        self.assertEqual(feats['demo_age'], 42.0)
+        self.assertEqual(feats['demo_gender'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()

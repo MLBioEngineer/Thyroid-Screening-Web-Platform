@@ -202,9 +202,10 @@ def extract_tremor_features(df_tremor):
     if df_tremor is None:
         df_tremor = pd.DataFrame()
 
-    # Filter to measurement_status == 'OK' if present
+    # Filter to measurement_status == 'OK' if present (case and whitespace insensitive)
     if 'measurement_status' in df_tremor.columns:
-        valid_df = df_tremor[df_tremor['measurement_status'] == 'OK']
+        valid_mask = df_tremor['measurement_status'].astype(str).str.strip().str.upper() == 'OK'
+        valid_df = df_tremor[valid_mask]
         if len(valid_df) > 50:
             df_tremor = valid_df
 

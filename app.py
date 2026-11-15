@@ -24,7 +24,8 @@ from scipy import signal
 sys.path.insert(0, os.path.abspath("."))
 from src.feature_extractor import (
     extract_tremor_features, extract_neck_features,
-    extract_patient_features, SAMPLING_RATE_TREMOR, safe_float
+    extract_patient_features, SAMPLING_RATE_TREMOR, safe_float,
+    get_series_by_aliases
 )
 
 # Set Streamlit Page Configuration
@@ -400,6 +401,7 @@ if menu == "🩺 Live Thyroid Screening":
                 st.warning(f"No sensor CSVs found on disk for {selected_pid}.")
 
         elif data_source == "Upload Custom Sensor CSVs (ESP32 Live Data)":
+            selected_pid = "CUSTOM_UPLOAD"
             st.markdown("Upload raw sensor CSV exports from the ESP32 data logger:")
             up_c1, up_c2 = st.columns(2)
             with up_c1:
@@ -411,7 +413,6 @@ if menu == "🩺 Live Thyroid Screening":
                 try:
                     tremor_df = pd.read_csv(up_tremor)
                     neck_df = pd.read_csv(up_neck)
-                    selected_pid = "CUSTOM_UPLOAD"
                     st.success(f"Custom files loaded: Tremor ({len(tremor_df)} rows), Neck ({len(neck_df)} rows).")
                 except Exception as e:
                     st.error(f"Error reading uploaded CSVs: {e}")
@@ -565,6 +566,7 @@ if menu == "🩺 Live Thyroid Screening":
                 ax.set_title("Top 10 Feature Attributions (v9 ExtraTrees)")
                 plt.tight_layout()
                 st.pyplot(fig)
+                plt.close(fig)
 
         # Safety Disclaimer
         st.markdown("""
@@ -619,42 +621,52 @@ elif menu == "📈 Sensor Signal Visualizer":
                 st.error(f"Error loading custom CSVs: {e}")
 
     if df_tremor is not None and df_neck is not None:
+        ax_data = get_series_by_aliases(df_tremor, ['accel_x_m_s2', 'accel_x', 'acc_x', 'ax', 'accelerometer_x'])
+        ay_data = get_series_by_aliases(df_tremor, ['accel_y_m_s2', 'accel_y', 'acc_y', 'ay', 'accelerometer_y'])
+        az_data = get_series_by_aliases(df_tremor, ['accel_z_m_s2', 'accel_z', 'acc_z', 'az', 'accelerometer_z'], default_val=9.8)
+        gx_data = get_series_by_aliases(df_tremor, ['gyro_x_rad_s', 'gyro_x', 'gyr_x', 'gx', 'gyroscope_x'])
+        gy_data = get_series_by_aliases(df_tremor, ['gyro_y_rad_s', 'gyro_y', 'gyr_y', 'gy', 'gyroscope_y'])
+        gz_data = get_series_by_aliases(df_tremor, ['gyro_z_rad_s', 'gyro_z', 'gyr_z', 'gz', 'gyroscope_z'])
+        min_len = min(len(ax_data), len(ay_data), len(az_data), len(gx_data), len(gy_data), len(gz_data))
+        if min_len < 1:
+            min_len = 100
+            ax_data, ay_data, az_data = np.zeros(min_len), np.zeros(min_len), np.full(min_len, 9.8)
+            gx_data, gy_data, gz_data = np.zeros(min_len), np.zeros(min_len), np.zeros(min_len)
+        t = np.arange(min_len) / SAMPLING_RATE_TREMOR
+
         col_w1, col_w2 = st.columns(2)
 
         with col_w1:
             st.markdown("##### 🖐️ Hand Tremor Accelerometer (100 Hz)")
             fig, ax = plt.subplots(figsize=(8, 3.5))
-            t = np.arange(len(df_tremor)) / SAMPLING_RATE_TREMOR
-            ax.plot(t, df_tremor.get('accel_x_m_s2', np.zeros(len(t))), label='Accel X', color='#ef4444', alpha=0.8, lw=1)
-            ax.plot(t, df_tremor.get('accel_y_m_s2', np.zeros(len(t))), label='Accel Y', color='#10b981', alpha=0.8, lw=1)
-            ax.plot(t, df_tremor.get('accel_z_m_s2', np.zeros(len(t))), label='Accel Z', color='#3b82f6', alpha=0.8, lw=1)
+            ax.plot(t, ax_data[:min_len], label='Accel X', color='#ef4444', alpha=0.8, lw=1)
+            ax.plot(t, ay_data[:min_len], label='Accel Y', color='#10b981', alpha=0.8, lw=1)
+            ax.plot(t, az_data[:min_len], label='Accel Z', color='#3b82f6', alpha=0.8, lw=1)
             ax.set_xlabel("Time (seconds)")
             ax.set_ylabel("Acceleration (m/s²)")
             ax.legend(loc='upper right')
             ax.grid(True, alpha=0.3)
             st.pyplot(fig)
+            plt.close(fig)
 
         with col_w2:
             st.markdown("##### 🔄 Hand Tremor Gyroscope (Angular Rate)")
             fig, ax = plt.subplots(figsize=(8, 3.5))
-            ax.plot(t, df_tremor.get('gyro_x_rad_s', np.zeros(len(t))), label='Gyro X', color='#f59e0b', alpha=0.8, lw=1)
-            ax.plot(t, df_tremor.get('gyro_y_rad_s', np.zeros(len(t))), label='Gyro Y', color='#8b5cf6', alpha=0.8, lw=1)
-            ax.plot(t, df_tremor.get('gyro_z_rad_s', np.zeros(len(t))), label='Gyro Z', color='#ec4899', alpha=0.8, lw=1)
+            ax.plot(t, gx_data[:min_len], label='Gyro X', color='#f59e0b', alpha=0.8, lw=1)
+            ax.plot(t, gy_data[:min_len], label='Gyro Y', color='#8b5cf6', alpha=0.8, lw=1)
+            ax.plot(t, gz_data[:min_len], label='Gyro Z', color='#ec4899', alpha=0.8, lw=1)
             ax.set_xlabel("Time (seconds)")
             ax.set_ylabel("Angular Velocity (rad/s)")
             ax.legend(loc='upper right')
             ax.grid(True, alpha=0.3)
             st.pyplot(fig)
+            plt.close(fig)
 
         col_s1, col_s2 = st.columns(2)
 
         with col_s1:
             st.markdown("##### 📊 Tremor Power Spectral Density (Welch PSD)")
-            # Compute Welch PSD of acceleration magnitude
-            ax_data = df_tremor.get('accel_x_m_s2', np.zeros(len(t))).values
-            ay_data = df_tremor.get('accel_y_m_s2', np.zeros(len(t))).values
-            az_data = df_tremor.get('accel_z_m_s2', np.zeros(len(t))).values
-            amag = np.sqrt(ax_data**2 + ay_data**2 + az_data**2)
+            amag = np.sqrt(ax_data[:min_len]**2 + ay_data[:min_len]**2 + az_data[:min_len]**2)
             amag = amag[np.isfinite(amag)]
             if len(amag) < 8:
                 amag = np.zeros(10)
@@ -675,10 +687,15 @@ elif menu == "📈 Sensor Signal Visualizer":
             ax.legend(loc='upper right', fontsize=8)
             ax.grid(True, alpha=0.3)
             st.pyplot(fig)
+            plt.close(fig)
 
         with col_s2:
             st.markdown("##### 📏 VL53L0X Neck Surface Distance Profile")
-            dist = df_neck.get('distance_mm', pd.Series([50]*10)).dropna().values
+            dist = get_series_by_aliases(
+                df_neck,
+                ['distance_mm', 'distance', 'dist_mm', 'dist', 'neck_distance', 'neck_distance_mm', 'distance (mm)'],
+                default_val=50.0
+            )
             dist = dist[np.isfinite(dist)]
             if len(dist) == 0:
                 dist = np.array([50.0] * 10)
@@ -695,6 +712,7 @@ elif menu == "📈 Sensor Signal Visualizer":
             ax.legend(loc='upper right', fontsize=8)
             ax.grid(True, alpha=0.3)
             st.pyplot(fig)
+            plt.close(fig)
 
 
 # ==========================================================
@@ -771,6 +789,7 @@ elif menu == "📊 Dataset Profile & Cohort":
                wedgeprops={'edgecolor': 'white', 'linewidth': 2})
         ax.axis('equal')
         st.pyplot(fig)
+        plt.close(fig)
 
     with col_d2:
         st.markdown("##### 🎯 Primary v9 Supervised Cohort (70 Patients)")
@@ -784,6 +803,7 @@ elif menu == "📊 Dataset Profile & Cohort":
             ax.text(i, v + 0.8, str(v), ha='center', fontweight='bold')
         ax.grid(axis='y', alpha=0.3)
         st.pyplot(fig)
+        plt.close(fig)
 
     if not metadata_df.empty:
         st.markdown("---")
@@ -869,6 +889,7 @@ elif menu == "🏆 Benchmark Model Comparison":
                         fontweight='bold', fontsize=12)
         plt.tight_layout()
         st.pyplot(fig)
+        plt.close(fig)
 
     with col_b2:
         st.markdown("##### 📈 Model Accuracy Comparison")
@@ -888,6 +909,7 @@ elif menu == "🏆 Benchmark Model Comparison":
         ax.grid(axis='x', alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig)
+        plt.close(fig)
 
 
 # ==========================================================

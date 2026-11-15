@@ -148,7 +148,7 @@ A dedicated unit test suite verifies all mathematical pipelines and model reprod
 ```bash
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
-All 10 tests validate feature calculations, edge cases (empty inputs, NaNs, constant signals), and verify that test cohort accuracy strictly matches the 63.6% (7/11) poster presentation result.
+All 16 unit tests validate feature calculations across aliased channels, edge cases (empty inputs, NaNs, constant signals), interactive Streamlit UI workflows, and verify that test cohort accuracy strictly matches the 63.6% (7/11) poster presentation result.
 
 ---
 
@@ -189,36 +189,25 @@ All 10 tests validate feature calculations, edge cases (empty inputs, NaNs, cons
 
 ---
 
-## 📤 Pushing to Your GitHub Account
+## 📤 GitHub Repository Synchronization
 
-Follow these steps to upload this complete repository to your GitHub account:
+The repository is linked and synchronized with your GitHub account:
+- **Repository URL**: [https://github.com/MLBioEngineer/Thyroid-Screening-Web-Platform](https://github.com/MLBioEngineer/Thyroid-Screening-Web-Platform)
+- **Branch**: `main`
 
-### Step 1: Create a New GitHub Repository
-1. Log in to your GitHub account ([github.com/MLBioEngineer](https://github.com/MLBioEngineer)).
-2. Click **New Repository** (e.g., `Thyroid-Screening-Web-Platform`).
-3. Leave it empty (do NOT initialize with README or .gitignore).
-
-### Step 2: Initialize Git and Push from Terminal
+### Routine Push & Update Workflow:
 ```bash
-# Navigate to the project root directory
+# Navigate to repository
 cd D:\jannatum
 
-# Initialize git repository
-git init -b main
-
-# Add all project files
+# Check status and stage changes
 git add .
+git commit -m "Update message"
 
-# Commit project
-git commit -m "Initial commit: Multimodal Thyroid Screening Website and ML Benchmark Pipeline"
-
-# Link your remote GitHub repository
-git remote add origin https://github.com/MLBioEngineer/Thyroid-Screening-Web-Platform.git
-
-# Push to your GitHub account
-git push -u origin main
+# Push to your GitHub repository
+git push origin main
 ```
-*(Windows Git Credential Manager will automatically authenticate using your stored GitHub credentials).*
+*(Windows Git Credential Manager automatically authenticates using stored GitHub credentials).*
 
 ---
 
