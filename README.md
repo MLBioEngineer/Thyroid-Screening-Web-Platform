@@ -78,6 +78,10 @@ This project introduces a **low-cost, non-invasive point-of-care screening proto
 
 ## 📊 Dataset Profile & Cohort Partitioning
 
+[![Dataset Release](https://img.shields.io/badge/Dataset-Download%20(158%20MB)-blue?logo=github)](https://github.com/MLBioEngineer/Thyroid-Screening-Web-Platform/releases/download/v1.0.0/Thyroid_Data.zip)
+
+> 💡 **Raw Dataset Download**: The complete raw dataset archive `Thyroid_Data.zip` (157.7 MB) containing all 127 subjects' sensor recordings (`neck_*.csv`, `tremor_*.csv`, `voice_*.wav`, and session metadata) is hosted and directly downloadable from the official [GitHub Release v1.0.0](https://github.com/MLBioEngineer/Thyroid-Screening-Web-Platform/releases/tag/v1.0.0).
+
 <div align="center">
   <img src="poster_assets/image7.png" width="90%" alt="Dataset Profile">
 </div>
