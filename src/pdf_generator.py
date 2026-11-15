@@ -43,6 +43,12 @@ def generate_patient_pdf(
     Generates a professional clinical PDF screening report.
     Returns bytes of the compiled PDF.
     """
+    import re
+    pid_str = str(patient_id).strip()
+    m_num = re.search(r'\d+', pid_str)
+    norm_pid = f"TH{int(m_num.group()):03d}" if (m_num and 'th' in pid_str.lower()) else pid_str
+    safe_pid = _safe_xml(norm_pid)
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -50,7 +56,9 @@ def generate_patient_pdf(
         rightMargin=36,
         leftMargin=36,
         topMargin=36,
-        bottomMargin=36
+        bottomMargin=36,
+        title=f"Thyroid Screening Report - {safe_pid}",
+        author="JUST BME Multimodal Lab"
     )
 
     styles = getSampleStyleSheet()
@@ -152,7 +160,6 @@ def generate_patient_pdf(
     safe_r_name = _safe_xml(researcher_name)
     safe_r_phone = _safe_xml(researcher_phone)
     safe_r_gender = _safe_xml(researcher_gender)
-    safe_pid = _safe_xml(patient_id)
     meta_text = (
         f"<b>Report ID:</b> REP-{safe_pid}-{datetime.now().strftime('%Y%m%d%H%M')} &nbsp;&nbsp;|&nbsp;&nbsp; "
         f"<b>Generated:</b> {now_str} &nbsp;&nbsp;|&nbsp;&nbsp; "
@@ -169,7 +176,7 @@ def generate_patient_pdf(
         if val is None:
             return fallback
         s = str(val).strip()
-        if not s or s.lower() in ['nan', 'none', 'null', 'n/a', 'nan kg', 'nan ng/dl', 'nan miu/l']:
+        if not s or any(k in s.lower() for k in ['nan', 'none', 'null', 'n/a', 'pending', 'not recorded']):
             return fallback
         if s.lower().startswith('nan'):
             return fallback
@@ -183,13 +190,15 @@ def generate_patient_pdf(
             return default
 
     clean_gender = _clean_str(gender, fallback="Not Recorded")
+    if clean_gender != "Not Recorded":
+        clean_gender = clean_gender.capitalize()
     clean_weight = _clean_str(weight, fallback="Not Recorded")
     clean_tsh = _clean_str(tsh_val, fallback="Pending Evaluation")
     clean_ft4 = _clean_str(ft4_val, fallback="Pending Evaluation")
     clean_ref = _clean_str(ref_status, fallback="Pending Evaluation")
 
     # Format TSH display
-    if clean_tsh != "Pending Evaluation":
+    if clean_tsh != "Pending Evaluation" and not any(k in clean_tsh.lower() for k in ['pending', 'nan', 'none', 'null', 'n/a', 'not recorded']):
         if "miu/l" not in clean_tsh.lower():
             tsh_display = f"{_safe_xml(clean_tsh)} mIU/L"
         else:
@@ -198,7 +207,7 @@ def generate_patient_pdf(
         tsh_display = "Pending Evaluation"
 
     # Format FT4 display
-    if clean_ft4 != "Pending Evaluation":
+    if clean_ft4 != "Pending Evaluation" and not any(k in clean_ft4.lower() for k in ['pending', 'nan', 'none', 'null', 'n/a', 'not recorded']):
         if "ng/dl" not in clean_ft4.lower():
             ft4_display = f"{_safe_xml(clean_ft4)} ng/dL"
         else:
@@ -207,7 +216,7 @@ def generate_patient_pdf(
         ft4_display = "Pending Evaluation"
 
     # Format Weight display
-    if clean_weight != "Not Recorded":
+    if clean_weight != "Not Recorded" and not any(k in clean_weight.lower() for k in ['not recorded', 'nan', 'none', 'null', 'n/a', 'pending']):
         if "kg" not in clean_weight.lower():
             weight_display = f"{_safe_xml(clean_weight)} kg"
         else:

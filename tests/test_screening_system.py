@@ -452,6 +452,9 @@ class TestPatientPrivacyAndStyling(unittest.TestCase):
         self.assertEqual(format_weight(None), "Not Recorded")
         self.assertEqual(format_weight("nan"), "Not Recorded")
         self.assertEqual(format_weight("nan kg"), "Not Recorded")
+        self.assertEqual(format_weight("N/A"), "Not Recorded")
+        self.assertEqual(format_weight("Pending Lab"), "Not Recorded")
+        self.assertEqual(format_weight("not recorded"), "Not Recorded")
         self.assertEqual(format_weight("58.0"), "58 kg")
         self.assertEqual(format_weight(58), "58 kg")
 
@@ -459,29 +462,37 @@ class TestPatientPrivacyAndStyling(unittest.TestCase):
         self.assertEqual(format_tsh(np.nan), "Pending Evaluation")
         self.assertEqual(format_tsh(None), "Pending Evaluation")
         self.assertEqual(format_tsh("nan"), "Pending Evaluation")
+        self.assertEqual(format_tsh("N/A"), "Pending Evaluation")
+        self.assertEqual(format_tsh("Pending Lab"), "Pending Evaluation")
         self.assertEqual(format_tsh("2.1"), "2.1 mIU/L")
+        self.assertEqual(format_tsh("<0.010"), "<0.010 mIU/L")
+        self.assertEqual(format_tsh(">150"), ">150 mIU/L")
 
         # FT4 sanitization
         self.assertEqual(format_ft4(np.nan), "Pending Evaluation")
         self.assertEqual(format_ft4(None), "Pending Evaluation")
         self.assertEqual(format_ft4("nan ng/dL"), "Pending Evaluation")
+        self.assertEqual(format_ft4("N/A"), "Pending Evaluation")
+        self.assertEqual(format_ft4("Pending Lab"), "Pending Evaluation")
         self.assertEqual(format_ft4("1.2"), "1.2 ng/dL")
 
         # Age and Gender sanitization
         self.assertEqual(format_age(np.nan), "Not Recorded")
+        self.assertEqual(format_age("N/A"), "Not Recorded")
         self.assertEqual(format_age(35), "35 yrs")
         self.assertEqual(format_gender(np.nan), "Not Recorded")
         self.assertEqual(format_gender("female"), "Female")
+        self.assertEqual(format_gender("N/A"), "Not Recorded")
 
     def test_pdf_deidentification_and_no_nan(self):
         from src.pdf_generator import generate_patient_pdf
         pdf_bytes = generate_patient_pdf(
-            patient_id="TH001",
+            patient_id="th001",
             patient_name="Mrs. Mahbuba Khatun",  # Real name input should be completely shielded
             age=float('nan'),
             gender="nan",
             weight="nan kg",
-            tsh_val="nan",
+            tsh_val="Pending Lab",
             ft4_val="nan ng/dL",
             ref_status="nan",
             pred_label="Normal",
@@ -503,6 +514,9 @@ class TestPatientPrivacyAndStyling(unittest.TestCase):
         self.assertNotIn("nan kg", pdf_str)
         self.assertNotIn("nan ng/dL", pdf_str)
         self.assertNotIn("nan mIU/L", pdf_str)
+        self.assertNotIn("Pending Lab mIU/L", pdf_str)
+        self.assertNotIn("Pending Lab ng/dL", pdf_str)
+        self.assertIn("TH001", pdf_str)
 
     def test_css_font_contrast_rules(self):
         with open("app.py", "r", encoding="utf-8") as f:
@@ -518,6 +532,10 @@ class TestPatientPrivacyAndStyling(unittest.TestCase):
         # High-contrast widget labels
         self.assertIn("section[data-testid=\"stMain\"] label", app_code)
         self.assertIn("#0f172a !important", app_code)
+
+        # Dropdown popover and patient box contrast
+        self.assertIn("div[data-baseweb=\"popover\"]", app_code)
+        self.assertIn(".patient-info-box", app_code)
 
     def test_streamlit_config_exists(self):
         self.assertTrue(os.path.exists(".streamlit/config.toml"))

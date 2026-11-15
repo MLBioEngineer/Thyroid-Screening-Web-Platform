@@ -401,18 +401,18 @@ st.markdown("""
         color: #f8fafc !important;
         border-right: 1px solid #1e293b !important;
     }
-    section[data-testid="stSidebar"] *,
-    [data-testid="stSidebar"] * {
-        color: #f8fafc !important;
-    }
     section[data-testid="stSidebar"] hr,
     [data-testid="stSidebar"] hr {
         border-color: #334155 !important;
     }
     section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+    section[data-testid="stSidebar"] label *,
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+    section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] *,
     [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+    [data-testid="stSidebar"] label *,
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"],
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] * {
         color: #f8fafc !important;
         font-weight: 700 !important;
         font-size: 0.88rem !important;
@@ -428,14 +428,22 @@ st.markdown("""
         background-color: transparent !important;
         color: #ffffff !important;
     }
+    section[data-testid="stSidebar"] div[data-baseweb="select"] svg,
+    [data-testid="stSidebar"] div[data-baseweb="select"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
     section[data-testid="stSidebar"] .stRadio label p,
     [data-testid="stSidebar"] .stRadio label p {
         color: #f8fafc !important;
         font-weight: 600 !important;
     }
     section[data-testid="stSidebar"] .stButton > button,
-    [data-testid="stSidebar"] .stButton > button {
+    section[data-testid="stSidebar"] .stButton button,
+    [data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] .stButton button {
         background-color: #1e293b !important;
+        background: #1e293b !important;
         color: #ffffff !important;
         border: 1px solid #475569 !important;
         font-weight: 700 !important;
@@ -443,13 +451,25 @@ st.markdown("""
         box-shadow: none !important;
     }
     section[data-testid="stSidebar"] .stButton > button:hover,
-    [data-testid="stSidebar"] .stButton > button:hover {
+    section[data-testid="stSidebar"] .stButton button:hover,
+    [data-testid="stSidebar"] .stButton > button:hover,
+    [data-testid="stSidebar"] .stButton button:hover {
         background-color: #334155 !important;
+        background: #334155 !important;
         border-color: #2dd4bf !important;
         color: #2dd4bf !important;
     }
-    section[data-testid="stSidebar"] .stButton > button * {
-        color: inherit !important;
+    section[data-testid="stSidebar"] .stButton > button *,
+    section[data-testid="stSidebar"] .stButton button *,
+    [data-testid="stSidebar"] .stButton > button *,
+    [data-testid="stSidebar"] .stButton button * {
+        color: #ffffff !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover *,
+    section[data-testid="stSidebar"] .stButton button:hover *,
+    [data-testid="stSidebar"] .stButton > button:hover *,
+    [data-testid="stSidebar"] .stButton button:hover * {
+        color: #2dd4bf !important;
     }
 
     /* 2. Main Workspace Contrast & Crisp Dark Typography */
@@ -474,15 +494,25 @@ st.markdown("""
 
     /* 3. High-Contrast Form & Widget Labels (Never Faint or Washed Out) */
     section[data-testid="stMain"] label,
+    section[data-testid="stMain"] label *,
     section[data-testid="stMain"] .stSelectbox label,
+    section[data-testid="stMain"] .stSelectbox label *,
     section[data-testid="stMain"] .stMultiSelect label,
+    section[data-testid="stMain"] .stMultiSelect label *,
     section[data-testid="stMain"] .stTextInput label,
+    section[data-testid="stMain"] .stTextInput label *,
     section[data-testid="stMain"] .stTextArea label,
+    section[data-testid="stMain"] .stTextArea label *,
     section[data-testid="stMain"] .stSlider label,
+    section[data-testid="stMain"] .stSlider label *,
     section[data-testid="stMain"] .stRadio label,
+    section[data-testid="stMain"] .stRadio label *,
     section[data-testid="stMain"] [data-testid="stWidgetLabel"],
-    section[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
-    section[data-testid="stMain"] [data-testid="stWidgetLabel"] span {
+    section[data-testid="stMain"] [data-testid="stWidgetLabel"] *,
+    div[data-testid="stWidgetLabel"] p,
+    div[data-testid="stWidgetLabel"] span,
+    div[data-testid="stWidgetLabel"] label,
+    div[data-testid="stWidgetLabel"] * {
         color: #0f172a !important;
         font-weight: 700 !important;
         font-size: 0.95rem !important;
@@ -493,11 +523,17 @@ st.markdown("""
 
     /* 4. High-Contrast Action Buttons (Solid Forest Teal, Bold White Text) */
     section[data-testid="stMain"] .stButton > button,
+    section[data-testid="stMain"] .stButton button,
     section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button,
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] button,
     section[data-testid="stMain"] .stDownloadButton > button,
+    section[data-testid="stMain"] .stDownloadButton button,
     section[data-testid="stMain"] button[kind="primary"],
-    section[data-testid="stMain"] button[kind="secondary"] {
+    section[data-testid="stMain"] button[kind="secondary"],
+    .main .stButton button,
+    .main .stDownloadButton button {
         background-color: #0f766e !important;
+        background: #0f766e !important;
         background-image: none !important;
         color: #ffffff !important;
         border: 1.5px solid #0d9488 !important;
@@ -509,44 +545,112 @@ st.markdown("""
         transition: all 0.2s ease-in-out !important;
     }
     section[data-testid="stMain"] .stButton > button:hover,
+    section[data-testid="stMain"] .stButton button:hover,
     section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button:hover,
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] button:hover,
     section[data-testid="stMain"] .stDownloadButton > button:hover,
+    section[data-testid="stMain"] .stDownloadButton button:hover,
     section[data-testid="stMain"] button[kind="primary"]:hover,
-    section[data-testid="stMain"] button[kind="secondary"]:hover {
+    section[data-testid="stMain"] button[kind="secondary"]:hover,
+    .main .stButton button:hover,
+    .main .stDownloadButton button:hover {
         background-color: #115e59 !important;
+        background: #115e59 !important;
         border-color: #0f766e !important;
         color: #ffffff !important;
         box-shadow: 0 4px 10px rgba(15, 118, 110, 0.3) !important;
         transform: translateY(-1px) !important;
     }
     section[data-testid="stMain"] .stButton > button *,
+    section[data-testid="stMain"] .stButton button *,
     section[data-testid="stMain"] [data-testid="stFormSubmitButton"] > button *,
-    section[data-testid="stMain"] .stDownloadButton > button * {
+    section[data-testid="stMain"] [data-testid="stFormSubmitButton"] button *,
+    section[data-testid="stMain"] .stDownloadButton > button *,
+    section[data-testid="stMain"] .stDownloadButton button *,
+    section[data-testid="stMain"] button[kind="primary"] *,
+    section[data-testid="stMain"] button[kind="secondary"] *,
+    .main .stButton button *,
+    .main .stDownloadButton button * {
         color: #ffffff !important;
         font-weight: 700 !important;
         font-size: 0.95rem !important;
     }
 
     /* 5. Dropdown & Input Controls in Main Workspace */
-    section[data-testid="stMain"] div[data-baseweb="select"] {
+    section[data-testid="stMain"] div[data-baseweb="select"],
+    .main div[data-baseweb="select"] {
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 8px !important;
         background-color: #ffffff !important;
     }
-    section[data-testid="stMain"] div[data-baseweb="select"] > div {
+    section[data-testid="stMain"] div[data-baseweb="select"] > div,
+    section[data-testid="stMain"] div[data-baseweb="select"] div,
+    .main div[data-baseweb="select"] > div,
+    .main div[data-baseweb="select"] div {
         background-color: #ffffff !important;
         color: #0f172a !important;
     }
-    section[data-testid="stMain"] div[data-baseweb="select"] * {
+    section[data-testid="stMain"] div[data-baseweb="select"] *,
+    .main div[data-baseweb="select"] * {
+        color: #0f172a !important;
+    }
+    section[data-testid="stMain"] div[data-baseweb="select"] svg,
+    .main div[data-baseweb="select"] svg {
+        fill: #0f172a !important;
         color: #0f172a !important;
     }
     section[data-testid="stMain"] input,
-    section[data-testid="stMain"] textarea {
+    section[data-testid="stMain"] textarea,
+    .main input,
+    .main textarea {
         color: #0f172a !important;
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
+    }
+
+    /* 6. Dropdown Options Menu / Popover (Always Crisp White Background & Dark Text) */
+    div[data-baseweb="popover"],
+    div[data-baseweb="popover"] > div,
+    div[data-baseweb="menu"],
+    ul[role="listbox"],
+    div[data-baseweb="popover"] ul {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.12) !important;
+    }
+    div[data-baseweb="popover"] li[role="option"],
+    ul[role="listbox"] li,
+    div[data-baseweb="popover"] * {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    div[data-baseweb="popover"] li[role="option"]:hover,
+    ul[role="listbox"] li:hover,
+    div[data-baseweb="popover"] li[aria-selected="true"] {
+        background-color: #e6f4f1 !important;
+        color: #0d9488 !important;
+    }
+    div[data-baseweb="popover"] li[role="option"]:hover *,
+    ul[role="listbox"] li:hover *,
+    div[data-baseweb="popover"] li[aria-selected="true"] * {
+        background-color: #e6f4f1 !important;
+        color: #0d9488 !important;
+    }
+
+    /* 7. Patient Info Box and Cards Visibility */
+    .patient-info-box {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+    }
+    .patient-info-box * {
+        color: #0f172a;
+    }
+    .modern-card {
+        color: #0f172a !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -561,7 +665,7 @@ def format_weight(w):
     if pd.isna(w) or w is None:
         return "Not Recorded"
     s = str(w).strip()
-    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan kg']:
+    if not s or any(k in s.lower() for k in ['nan', 'none', 'n/a', 'null', 'pending', 'not recorded']):
         return "Not Recorded"
     s_clean = s.replace('kg', '').strip()
     try:
@@ -577,7 +681,7 @@ def format_tsh(t):
     if pd.isna(t) or t is None:
         return "Pending Evaluation"
     s = str(t).strip()
-    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan miu/l']:
+    if not s or any(k in s.lower() for k in ['nan', 'none', 'n/a', 'null', 'pending', 'not recorded']):
         return "Pending Evaluation"
     s_clean = s.replace('mIU/L', '').replace('miu/l', '').strip()
     return f"{s_clean} mIU/L"
@@ -587,7 +691,7 @@ def format_ft4(f):
     if pd.isna(f) or f is None:
         return "Pending Evaluation"
     s = str(f).strip()
-    if not s or s.lower() in ['nan', 'none', 'n/a', 'null', 'nan ng/dl']:
+    if not s or any(k in s.lower() for k in ['nan', 'none', 'n/a', 'null', 'pending', 'not recorded']):
         return "Pending Evaluation"
     s_clean = s.replace('ng/dL', '').replace('ng/dl', '').strip()
     return f"{s_clean} ng/dL"
@@ -597,7 +701,7 @@ def format_age(a):
     if pd.isna(a) or a is None:
         return "Not Recorded"
     s = str(a).strip()
-    if not s or s.lower() in ['nan', 'none', 'n/a', 'null']:
+    if not s or any(k in s.lower() for k in ['nan', 'none', 'n/a', 'null', 'pending', 'not recorded']):
         return "Not Recorded"
     try:
         val = float(s)
@@ -612,7 +716,7 @@ def format_gender(g):
     if pd.isna(g) or g is None:
         return "Not Recorded"
     s = str(g).strip()
-    if not s or s.lower() in ['nan', 'none', 'n/a', 'null']:
+    if not s or any(k in s.lower() for k in ['nan', 'none', 'n/a', 'null', 'pending', 'not recorded']):
         return "Not Recorded"
     return s.capitalize()
 
@@ -909,9 +1013,9 @@ u_gender = st.session_state.get('user_gender', 'N/A')
 
 st.sidebar.markdown(f"""
 <div class="user-profile-card">
-    <div class="user-profile-title">Logged-In Researcher</div>
-    <div class="user-profile-name">{u_name}</div>
-    <div class="user-profile-meta">📱 {u_phone} &bull; {u_gender}</div>
+    <div class="user-profile-title" style="color: #2dd4bf !important; font-weight: 700;">Logged-In Researcher</div>
+    <div class="user-profile-name" style="color: #ffffff !important; font-weight: 800;">{u_name}</div>
+    <div class="user-profile-meta" style="color: #94a3b8 !important;">📱 {u_phone} &bull; {u_gender}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -923,7 +1027,7 @@ if st.sidebar.button("🚪 Sign Out / Logout", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("<div style='font-size:0.75rem; font-weight:800; color:#64748b; letter-spacing:0.8px; margin-bottom:6px;'>WORKSPACE</div>", unsafe_allow_html=True)
+st.sidebar.markdown("<div style='font-size:0.75rem; font-weight:800; color:#2dd4bf !important; letter-spacing:1px; margin-bottom:6px;'>WORKSPACE</div>", unsafe_allow_html=True)
 
 # Navigation Modules matching user screenshot
 workspace_modules = [
@@ -1288,11 +1392,19 @@ elif menu == "👥 Patients":
             col_i1, col_i2 = st.columns([1.5, 1])
             with col_i1:
                 st.markdown(f"""
-                <div class="patient-info-box" style="background:#ffffff; border:1.5px solid #0d9488; border-radius:10px; padding:16px;">
+                <div class="patient-info-box" style="background-color:#ffffff; border:2px solid #0d9488; border-radius:10px; padding:16px 20px; color:#0f172a; margin-bottom:16px;">
                     <div style="font-size:1.1rem; font-weight:800; color:#0d9488; margin-bottom:8px;">🔬 Participant {inspected_pid} &bull; Research Subject (De-identified)</div>
-                    <div><b>Age:</b> {p_age_disp} &nbsp;|&nbsp; <b>Gender:</b> {p_gender_disp} &nbsp;|&nbsp; <b>Weight:</b> {p_weight_disp}</div>
-                    <div style="margin-top:6px;"><b>Serum TSH:</b> {p_tsh_disp} &nbsp;|&nbsp; <b>FT4:</b> {p_ft4_disp} &nbsp;|&nbsp; <b>Benchmark:</b> {p_status_disp}</div>
-                    <div style="margin-top:6px; font-size:0.85rem; color:#64748b;"><b>Stored Files:</b> {len(t_files)} Tremor CSVs, {len(n_files)} Neck Distance CSVs</div>
+                    <div style="color:#0f172a; font-size:0.95rem; line-height:1.7;">
+                        <span style="color:#0f766e; font-weight:700;">Age:</span> <span style="color:#0f172a; font-weight:600;">{p_age_disp}</span> &nbsp;|&nbsp;
+                        <span style="color:#0f766e; font-weight:700;">Gender:</span> <span style="color:#0f172a; font-weight:600;">{p_gender_disp}</span> &nbsp;|&nbsp;
+                        <span style="color:#0f766e; font-weight:700;">Weight:</span> <span style="color:#0f172a; font-weight:600;">{p_weight_disp}</span>
+                    </div>
+                    <div style="margin-top:6px; color:#0f172a; font-size:0.95rem; line-height:1.7;">
+                        <span style="color:#0f766e; font-weight:700;">Serum TSH:</span> <span style="color:#0f172a; font-weight:600;">{p_tsh_disp}</span> &nbsp;|&nbsp;
+                        <span style="color:#0f766e; font-weight:700;">FT4:</span> <span style="color:#0f172a; font-weight:600;">{p_ft4_disp}</span> &nbsp;|&nbsp;
+                        <span style="color:#0f766e; font-weight:700;">Benchmark:</span> <span style="color:#0f172a; font-weight:600;">{p_status_disp}</span>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.85rem; color:#475569;"><b>Stored Files:</b> {len(t_files)} Tremor CSVs, {len(n_files)} Neck Distance CSVs</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_i2:
@@ -2020,13 +2132,13 @@ elif menu == "📄 Reports":
             <div style="font-size:0.75rem; color:#6ee7b7; font-weight:700;">OFFICIAL CLINICAL RESEARCH REPORT &bull; JUST BME</div>
             <div style="font-size:1.15rem; font-weight:800;">Non-Invasive Multimodal Thyroid Screening Assessment</div>
         </div>
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:14px; font-size:0.85rem;">
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:14px; font-size:0.85rem; color:#0f172a;">
             <div><b>Participant ID:</b> {rep_pid}<br><b>Subject:</b> Research Participant {rep_pid} (De-identified)</div>
             <div><b>Age / Gender:</b> {format_age(p_age)} / {p_gender}<br><b>Weight:</b> {p_weight}</div>
             <div><b>Clinical TSH:</b> {p_tsh}<br><b>Reference Benchmark:</b> <b>{p_ref}</b></div>
         </div>
         <hr style="border:none; border-top:1px solid #e2e8f0; margin:12px 0;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; font-size:0.85rem;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; font-size:0.85rem; color:#0f172a;">
             <div>
                 <b>Bio-Signal Findings:</b><br>
                 &bull; 8–12 Hz Tremor Ratio: <b>{feats.get('tremor_amag_ratio_8_12', 0.0)*100:.1f}%</b><br>
