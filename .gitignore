@@ -4,9 +4,8 @@ __pycache__/
 *$py.class
 *.log
 
-# Large data archive and raw audio files (over GitHub file size recommendation)
+# Large data archive (over GitHub 100 MB single file recommendation)
 Thyroid_Data.zip
-*.wav
 
 # OS artifacts
 Thumbs.db
