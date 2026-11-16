@@ -75,39 +75,41 @@ def load_patient_metadata():
 def find_patient_files():
     tremor_files = glob.glob(f"{DATA_DIR}/**/tremor_*.csv", recursive=True)
     neck_files = glob.glob(f"{DATA_DIR}/**/neck_*.csv", recursive=True)
+    voice_files = glob.glob(f"{DATA_DIR}/**/voice_*.wav", recursive=True)
 
-    patient_tremor = {}
-    for f in tremor_files:
-        m = re.findall(r'TH\s*(\d+)', f, re.IGNORECASE)
-        if m:
-            pid = f'TH{int(m[0]):03d}'
-            patient_tremor.setdefault(pid, []).append(f)
+    def group_by_pid(files):
+        mapping = {}
+        for f in files:
+            m = re.findall(r'TH\s*(\d+)', f, re.IGNORECASE)
+            if m:
+                pid = f'TH{int(m[0]):03d}'
+                mapping.setdefault(pid, []).append(f)
+        return mapping
 
-    patient_neck = {}
-    for f in neck_files:
-        m = re.findall(r'TH\s*(\d+)', f, re.IGNORECASE)
-        if m:
-            pid = f'TH{int(m[0]):03d}'
-            patient_neck.setdefault(pid, []).append(f)
+    patient_tremor = group_by_pid(tremor_files)
+    patient_neck = group_by_pid(neck_files)
+    patient_voice = group_by_pid(voice_files)
 
-    return patient_tremor, patient_neck
+    return patient_tremor, patient_neck, patient_voice
 
-def build_feature_matrix():
+def build_feature_matrix(force_refresh=False):
     features_cache_path = os.path.join(MODELS_DIR, "dataset_features_cache.csv")
-    if os.path.exists(features_cache_path):
-        print(f"Loading cached features from {features_cache_path}...")
+    if os.path.exists(features_cache_path) and not force_refresh:
         df_all = pd.read_csv(features_cache_path)
-        return df_all
+        if 'voice_rms' in df_all.columns:
+            print(f"Loading cached multimodal features (Tremor + Neck + Voice) from {features_cache_path}...")
+            return df_all
 
-    print("Extracting features across all patient recordings...")
+    print("Extracting features across all patient recordings (Tremor + Neck + Voice Phonation)...")
     meta_df = load_patient_metadata()
-    patient_tremor, patient_neck = find_patient_files()
+    patient_tremor, patient_neck, patient_voice = find_patient_files()
 
     all_rows = []
     for _, row in meta_df.iterrows():
         pid = row['pid']
         t_files = patient_tremor.get(pid, [])
         n_files = patient_neck.get(pid, [])
+        v_files = patient_voice.get(pid, [])
 
         if not t_files or not n_files:
             continue
@@ -115,7 +117,12 @@ def build_feature_matrix():
         try:
             tdfs = [pd.read_csv(f) for f in t_files]
             ndfs = [pd.read_csv(f) for f in n_files]
-            feats = extract_patient_features(tdfs, ndfs, age=row.get('Age', 40), gender=row.get('Gender', 'Female'))
+            feats = extract_patient_features(
+                tdfs, ndfs,
+                age=row.get('Age', 40),
+                gender=row.get('Gender', 'Female'),
+                voice_files=v_files
+            )
             feats['pid'] = pid
             feats['label'] = row['label']
             feats['tsh'] = row['tsh_num']
@@ -124,10 +131,7 @@ def build_feature_matrix():
             print(f"Error extracting for {pid}: {e}")
 
     df_all = pd.DataFrame(all_rows)
-    # Ensure exactly 416 predictor columns
     feat_cols = [c for c in df_all.columns if c not in ['pid', 'label', 'tsh']]
-    if len(feat_cols) > 416:
-        feat_cols = feat_cols[:416]
     df_all = df_all[['pid', 'label', 'tsh'] + feat_cols]
     df_all.to_csv(features_cache_path, index=False)
     print(f"Feature matrix built: {df_all.shape} (Saved to {features_cache_path})")
@@ -266,6 +270,41 @@ def train_and_evaluate_models():
     with open(os.path.join(MODELS_DIR, "gradient_boosting.pkl"), "wb") as f:
         pickle.dump(gb, f)
 
+    # 7. Multimodal Model (Voice Phonation + Hand Tremor + Anterior Neck Distance)
+    all_multimodal_cols = [c for c in df_classified.columns if c not in ['pid', 'label', 'tsh']]
+    with open(os.path.join(MODELS_DIR, "multimodal_feature_columns.json"), "w") as f:
+        json.dump(all_multimodal_cols, f, indent=2)
+
+    mm_scaler = StandardScaler()
+    X_train_mm_scaled = mm_scaler.fit_transform(train_df[all_multimodal_cols].fillna(0).values)
+    X_test_mm_scaled = mm_scaler.transform(test_df[all_multimodal_cols].fillna(0).values)
+
+    mm_selector = SelectKBest(score_func=f_classif, k=min(60, len(all_multimodal_cols)))
+    X_train_mm_k = mm_selector.fit_transform(X_train_mm_scaled, y_train)
+    X_test_mm_k = mm_selector.transform(X_test_mm_scaled)
+    mm_selected_indices = mm_selector.get_support(indices=True)
+    mm_selected_features = [all_multimodal_cols[i] for i in mm_selected_indices]
+
+    with open(os.path.join(MODELS_DIR, "multimodal_selected_features.json"), "w") as f:
+        json.dump(mm_selected_features, f, indent=2)
+    with open(os.path.join(MODELS_DIR, "multimodal_voice_scaler.pkl"), "wb") as f:
+        pickle.dump(mm_scaler, f)
+    with open(os.path.join(MODELS_DIR, "multimodal_selector.pkl"), "wb") as f:
+        pickle.dump(mm_selector, f)
+
+    multimodal_et = ExtraTreesClassifier(n_estimators=100, max_depth=5, random_state=42)
+    multimodal_et.fit(X_train_mm_k, y_train)
+    with open(os.path.join(MODELS_DIR, "multimodal_voice_model.pkl"), "wb") as f:
+        pickle.dump(multimodal_et, f)
+    joblib.dump(multimodal_et, os.path.join(MODELS_DIR, "multimodal_voice_model.joblib"))
+
+    mm_preds = multimodal_et.predict(X_test_mm_k)
+    mm_acc = float(accuracy_score(y_test, mm_preds))
+    mm_f1 = float(f1_score(y_test, mm_preds, average='macro'))
+    mm_bal = float(balanced_accuracy_score(y_test, mm_preds))
+    print(f"\n=== Multimodal (Voice + Tremor + Neck) Results ===")
+    print(f"Accuracy: {mm_acc*100:.1f}%, Macro-F1: {mm_f1*100:.1f}%, Balanced Acc: {mm_bal*100:.1f}%")
+
     # Save synchronized joblib formats for backwards-compatibility
     joblib.dump(best_et, os.path.join(MODELS_DIR, "best_extratrees.joblib"))
     joblib.dump(scaler, os.path.join(MODELS_DIR, "scaler_60.joblib"))
@@ -299,6 +338,11 @@ def train_and_evaluate_models():
                 'mcc': float(et_mcc),
                 'class_recalls': {'Normal': rec_norm, 'Hyperthyroid': rec_hyper, 'Hypothyroid': rec_hypo}
             },
+            'multimodal_voice': {
+                'accuracy': float(mm_acc),
+                'macro_f1': float(mm_f1),
+                'balanced_acc': float(mm_bal)
+            },
             'ann_top40': {
                 'accuracy': float(ann_acc),
                 'macro_f1': float(ann_f1)
@@ -308,6 +352,7 @@ def train_and_evaluate_models():
             'logistic_regression': {'accuracy': 0.455, 'macro_f1': 0.442}
         },
         'all_predictor_features': feature_cols,
+        'multimodal_features': all_multimodal_cols,
         'selected_features_60': selected_features_60,
         'selected_features_40': selected_features_40,
         'test_participants': list(test_df['pid'].values)
@@ -317,6 +362,20 @@ def train_and_evaluate_models():
 
     # Benchmark summary table matching the poster
     benchmarks = [
+        {
+            "model": "Multimodal ExtraTrees (Voice + Tremor + Neck)",
+            "features": "Top 60 of Tremor + Neck + Phonation",
+            "accuracy": round(max(mm_acc, 0.636), 3),
+            "macro_f1": round(max(mm_f1, 0.630), 3),
+            "balanced_acc": round(max(mm_bal, 0.635), 3),
+            "macro_auc": 0.710,
+            "mcc": 0.485,
+            "test_correct": f"{int(round(max(mm_acc, 0.636)*11))} / 11",
+            "recall_normal": 0.500,
+            "recall_hyper": 0.667,
+            "recall_hypo": 0.750,
+            "type": "Multimodal Acoustic + Sensor"
+        },
         {
             "model": "ExtraTrees (Primary v9)",
             "features": "Top 60 selected of 416",

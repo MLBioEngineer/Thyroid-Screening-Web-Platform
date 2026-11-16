@@ -326,10 +326,76 @@ def generate_patient_pdf(
         ('RIGHTPADDING', (0, 0), (-1, -1), 5),
     ]))
     story.append(sensor_table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 8))
 
-    # 4. Machine Learning Screening Inference
-    story.append(Paragraph("3. MACHINE LEARNING SCREENING DECISION", section_heading))
+    # 4. Voice Phonation Analysis (ESP32 INMP441 Microphone)
+    story.append(Paragraph("3. ACOUSTIC VOICE PHONATION ANALYSIS (ESP32 INMP441)", section_heading))
+
+    voice_f0 = _safe_float(sensor_feats.get('voice_f0_mean', 0.0))
+    voice_jitter = _safe_float(sensor_feats.get('voice_jitter_pct', 0.0))
+    voice_shimmer = _safe_float(sensor_feats.get('voice_shimmer_pct', 0.0))
+    voice_hnr = _safe_float(sensor_feats.get('voice_hnr_db', 0.0))
+    voice_stability = _safe_float(sensor_feats.get('voice_stability_index', 0.0))
+
+    f0_text = f"<b>{voice_f0:.1f} Hz</b>" if voice_f0 > 0 else "<b>Baseline / 0.0 Hz</b>"
+    jitter_text = f"<b>{voice_jitter:.2f}%</b>" if voice_f0 > 0 else "<b>0.00%</b>"
+    shimmer_text = f"<b>{voice_shimmer:.2f}%</b>" if voice_f0 > 0 else "<b>0.00%</b>"
+    hnr_text = f"<b>{voice_hnr:.1f} dB</b>" if voice_f0 > 0 else "<b>0.0 dB</b>"
+    stab_text = f"<b>{voice_stability:.1f} / 100</b>" if voice_f0 > 0 else "<b>Baseline</b>"
+
+    voice_data = [
+        [
+            Paragraph("<b>Acoustic Phonation Metric</b>", body_bold),
+            Paragraph("<b>Acoustic Method / Modality</b>", body_bold),
+            Paragraph("<b>Measured Value</b>", body_bold),
+            Paragraph("<b>Clinical Reference Standard</b>", body_bold)
+        ],
+        [
+            Paragraph("Fundamental Phonation Pitch (F0)", body_style),
+            Paragraph("Autocorrelation Peak Picking (16 kHz)", small_style),
+            Paragraph(f0_text, body_bold),
+            Paragraph("85–255 Hz typical adult vocal pitch", small_style)
+        ],
+        [
+            Paragraph("Pitch Perturbation (Jitter)", body_style),
+            Paragraph("Cycle-to-Cycle Period Instability", small_style),
+            Paragraph(jitter_text, body_bold),
+            Paragraph("&lt; 1.04% Normal | Elevated in thyroid oedema", small_style)
+        ],
+        [
+            Paragraph("Amplitude Perturbation (Shimmer)", body_style),
+            Paragraph("Cycle-to-Cycle Amplitude Instability", small_style),
+            Paragraph(shimmer_text, body_bold),
+            Paragraph("&lt; 3.81% Normal | Elevated in vocal fatigue", small_style)
+        ],
+        [
+            Paragraph("Harmonics-to-Noise Ratio (HNR)", body_style),
+            Paragraph("Cepstral Harmonic Quality (Welch)", small_style),
+            Paragraph(hnr_text, body_bold),
+            Paragraph("&gt; 15–20 dB indicates pure vocal clarity", small_style)
+        ],
+        [
+            Paragraph("Phonation Stability Index", body_style),
+            Paragraph("Composite Acoustic Health Index", small_style),
+            Paragraph(stab_text, body_bold),
+            Paragraph("&gt; 80 Optimal acoustic stability", small_style)
+        ]
+    ]
+    voice_table = Table(voice_data, colWidths=[170, 130, 90, 150])
+    voice_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), teal_light),
+        ('GRID', (0, 0), (-1, -1), 0.5, gray_border),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    story.append(voice_table)
+    story.append(Spacer(1, 8))
+
+    # 5. Machine Learning Screening Inference
+    story.append(Paragraph("4. MACHINE LEARNING SCREENING DECISION", section_heading))
 
     pred_color = "#10b981" if pred_label == "Normal" else ("#8b5cf6" if pred_label == "Hyperthyroid" else "#f59e0b")
     prob_norm = prob_dict.get("Normal", 0.0) * 100
@@ -368,8 +434,8 @@ def generate_patient_pdf(
     story.append(ml_table)
     story.append(Spacer(1, 10))
 
-    # 5. Clinical Impression & Attestation
-    story.append(Paragraph("4. RESEARCHER & CLINICIAN REVIEW", section_heading))
+    # 6. Clinical Impression & Attestation
+    story.append(Paragraph("5. RESEARCHER & CLINICIAN REVIEW", section_heading))
 
     raw_notes = clinical_notes if clinical_notes.strip() else "Sensor recordings and ML inference reviewed. Findings are consistent with preliminary non-invasive screening protocol."
     safe_notes = _safe_xml(raw_notes)

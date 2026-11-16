@@ -545,5 +545,181 @@ class TestPatientPrivacyAndStyling(unittest.TestCase):
         self.assertIn("#0d9488", cfg)
 
 
+class TestVoiceFeatureExtractionAndIntegration(unittest.TestCase):
+    def setUp(self):
+        self.voice_file = "Thyroid_Data/03.11.26/TH054/voice_T01.wav"
+
+    def test_voice_feature_extraction_types_and_ranges(self):
+        from src.feature_extractor import extract_voice_features
+        if os.path.exists(self.voice_file):
+            feats = extract_voice_features(self.voice_file)
+            self.assertIsInstance(feats, dict)
+            # Verify all 34 voice features exist
+            self.assertIn("voice_rms", feats)
+            self.assertIn("voice_zcr", feats)
+            self.assertIn("voice_f0_mean", feats)
+            self.assertIn("voice_jitter_pct", feats)
+            self.assertIn("voice_shimmer_pct", feats)
+            self.assertIn("voice_hnr_db", feats)
+            self.assertIn("voice_stability_index", feats)
+            self.assertIn("voice_spectral_centroid", feats)
+            self.assertIn("voice_spectral_spread", feats)
+            self.assertIn("voice_spectral_rolloff", feats)
+            self.assertIn("voice_spectral_flatness", feats)
+            for m in range(1, 14):
+                self.assertIn(f"voice_mfcc_{m}", feats)
+            self.assertIn("voice_mfcc_mean", feats)
+            self.assertIn("voice_mfcc_std", feats)
+
+            # Ensure all values are finite floats
+            for k, v in feats.items():
+                self.assertFalse(np.isnan(v), f"Feature {k} returned NaN on voice recording!")
+                self.assertFalse(np.isinf(v), f"Feature {k} returned Inf on voice recording!")
+
+            # Verify reasonable ranges
+            self.assertGreater(feats["voice_f0_mean"], 50.0)
+            self.assertGreaterEqual(feats["voice_jitter_pct"], 0.0)
+            self.assertGreaterEqual(feats["voice_shimmer_pct"], 0.0)
+            self.assertGreaterEqual(feats["voice_stability_index"], 0.0)
+            self.assertLessEqual(feats["voice_stability_index"], 100.0)
+
+    def test_voice_silence_and_edge_cases(self):
+        from src.feature_extractor import extract_voice_features
+        # 1. Test None input
+        none_feats = extract_voice_features(None)
+        self.assertIsInstance(none_feats, dict)
+        self.assertEqual(len(none_feats), 34)
+        for k, v in none_feats.items():
+            self.assertFalse(np.isnan(v))
+            self.assertFalse(np.isinf(v))
+            self.assertEqual(v, 0.0)
+
+        # 2. Test zero-amplitude array
+        zero_audio = np.zeros(16000, dtype=np.float32)
+        zero_feats = extract_voice_features(zero_audio, fs=16000.0)
+        self.assertIsInstance(zero_feats, dict)
+        self.assertEqual(len(zero_feats), 34)
+        for k, v in zero_feats.items():
+            self.assertFalse(np.isnan(v), f"{k} is NaN on zero array")
+            self.assertFalse(np.isinf(v), f"{k} is Inf on zero array")
+
+        # 3. Test empty array
+        empty_audio = np.array([], dtype=np.float32)
+        empty_feats = extract_voice_features(empty_audio, fs=16000.0)
+        self.assertIsInstance(empty_feats, dict)
+        self.assertEqual(len(empty_feats), 34)
+        for k, v in empty_feats.items():
+            self.assertFalse(np.isnan(v))
+
+    def test_extract_patient_features_with_voice(self):
+        from src.feature_extractor import extract_patient_features
+        t = np.linspace(0, 10, 1000)
+        synth_tremor = pd.DataFrame({
+            'accel_x_m_s2': np.sin(2 * np.pi * 9 * t),
+            'accel_y_m_s2': np.cos(2 * np.pi * 9 * t),
+            'accel_z_m_s2': 9.8 + 0.1 * t,
+            'gyro_x_rad_s': np.zeros(1000),
+            'gyro_y_rad_s': np.zeros(1000),
+            'gyro_z_rad_s': np.zeros(1000)
+        })
+        synth_neck = pd.DataFrame({'distance_mm': [50.0] * 10})
+        v_files = [self.voice_file] if os.path.exists(self.voice_file) else None
+
+        feats = extract_patient_features([synth_tremor], [synth_neck], age=35, gender="Female", voice_files=v_files)
+        self.assertIn("demo_age", feats)
+        self.assertIn("tremor_amag_mean", feats)
+        self.assertIn("neck_mean_mm", feats)
+        self.assertIn("voice_f0_mean", feats)
+        self.assertIn("voice_jitter_pct", feats)
+        self.assertIn("voice_hnr_db", feats)
+        self.assertGreaterEqual(len(feats), 450)
+
+    def test_pdf_report_with_voice_phonation(self):
+        import io
+        import PyPDF2
+        from src.pdf_generator import generate_patient_pdf
+        pdf_bytes = generate_patient_pdf(
+            patient_id="TH054",
+            patient_name="Research Participant TH054 (Anonymized)",
+            age=42.0,
+            gender="Female",
+            weight="58 kg",
+            tsh_val="0.12 mIU/L",
+            ft4_val="2.4 ng/dL",
+            ref_status="Hyperthyroid",
+            pred_label="Hyperthyroid",
+            prob_dict={"Normal": 0.08, "Hyperthyroid": 0.88, "Hypothyroid": 0.04},
+            model_name="Multimodal ExtraTrees + Voice Phonation",
+            sensor_feats={
+                "tremor_amag_ratio_8_12": 0.45,
+                "tremor_amag_dom_freq": 10.2,
+                "tremor_amag_rms": 0.82,
+                "neck_mean_mm": 51.2,
+                "neck_std_mm": 0.38,
+                "voice_f0_mean": 215.4,
+                "voice_jitter_pct": 0.38,
+                "voice_shimmer_pct": 2.45,
+                "voice_hnr_db": 19.8,
+                "voice_stability_index": 87.5
+            },
+            researcher_name="Clinical Bioengineer",
+            researcher_phone="01712345678",
+            researcher_gender="Female",
+            clinical_notes="Voice phonation acoustic analysis verified via ESP32 INMP441."
+        )
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+
+        # Inspect extracted text via PyPDF2
+        reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        full_text = ""
+        for page in reader.pages:
+            full_text += page.extract_text() or ""
+
+        self.assertIn("ACOUSTIC VOICE PHONATION ANALYSIS", full_text)
+        self.assertIn("Fundamental Phonation Pitch (F0)", full_text)
+        self.assertIn("215.4 Hz", full_text)
+        self.assertIn("0.38%", full_text)
+        self.assertIn("2.45%", full_text)
+        self.assertIn("19.8 dB", full_text)
+        self.assertIn("87.5 / 100", full_text)
+
+    def test_audio_visualizer_and_multimodal_inference(self):
+        from app import find_patient_voice_files, run_screening_inference
+        # Verify voice files search
+        v_files = find_patient_voice_files("TH054")
+        self.assertIsInstance(v_files, list)
+        self.assertGreater(len(v_files), 0)
+        self.assertTrue(all(f.endswith(".wav") for f in v_files))
+
+        # Test multimodal screening inference with voice
+        t = np.linspace(0, 10, 1000)
+        synth_tremor = pd.DataFrame({
+            'accel_x_m_s2': np.sin(2 * np.pi * 9 * t),
+            'accel_y_m_s2': np.cos(2 * np.pi * 9 * t),
+            'accel_z_m_s2': 9.8 + 0.1 * t,
+            'gyro_x_rad_s': np.zeros(1000),
+            'gyro_y_rad_s': np.zeros(1000),
+            'gyro_z_rad_s': np.zeros(1000)
+        })
+        synth_neck = pd.DataFrame({'distance_mm': [50.0] * 10})
+
+        pred, probs, feats, used = run_screening_inference(
+            tremor_df=synth_tremor,
+            neck_df=synth_neck,
+            age=40,
+            gender="Female",
+            model_choice="Multimodal ExtraTrees + Voice Phonation (Voice + Tremor + Neck)",
+            voice_file=v_files[0]
+        )
+        self.assertIn(pred, ["Normal", "Hyperthyroid", "Hypothyroid"])
+        self.assertIn("voice_f0_mean", feats)
+        self.assertGreater(feats["voice_f0_mean"], 0.0)
+        self.assertIn("Normal", probs)
+        self.assertIn("Hyperthyroid", probs)
+        self.assertIn("Hypothyroid", probs)
+        self.assertAlmostEqual(sum(probs.values()), 1.0, places=3)
+
+
 if __name__ == '__main__':
     unittest.main()

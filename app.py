@@ -10,6 +10,7 @@ import glob
 import re
 import json
 import pickle
+import io
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -18,12 +19,14 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import streamlit as st
 from scipy import signal
+import scipy.io.wavfile as wavfile
 
 # Add local project root
 sys.path.insert(0, os.path.abspath("."))
 from src.feature_extractor import (
     extract_tremor_features, extract_neck_features,
-    extract_patient_features, SAMPLING_RATE_TREMOR, safe_float,
+    extract_patient_features, extract_voice_features,
+    SAMPLING_RATE_TREMOR, SAMPLING_RATE_VOICE, safe_float,
     get_series_by_aliases
 )
 from src.pdf_generator import generate_patient_pdf
@@ -779,6 +782,21 @@ def find_patient_sensor_files(pid):
         n_files.extend(glob.glob(f"Thyroid_Data/**/{pat}/neck_*.csv", recursive=True))
     return sorted(list(set(t_files))), sorted(list(set(n_files)))
 
+def find_patient_voice_files(pid):
+    """
+    Find patient voice phonation audio WAV files across all date folders.
+    Handles all folder naming schemes (e.g., TH030 vs TH30).
+    """
+    num_match = re.search(r'\d+', str(pid))
+    if not num_match:
+        return []
+    num = int(num_match.group())
+    patterns = [f"TH{num:03d}", f"TH{num:02d}", f"TH{num}", f"TH {num:03d}", f"TH {num}"]
+    v_files = []
+    for pat in set(patterns):
+        v_files.extend(glob.glob(f"Thyroid_Data/**/{pat}/voice_*.wav", recursive=True))
+    return sorted(list(set(v_files)))
+
 def normalize_pid(p):
     """Normalize patient ID to THxxx format."""
     m = re.findall(r'TH\s*(\d+)', str(p), re.IGNORECASE)
@@ -848,6 +866,28 @@ def load_models_and_metadata():
 
     test_cohort = pd.read_csv(os.path.join(models_dir, "heldout_test_set.csv"))
 
+    multimodal_voice_model = None
+    multimodal_voice_scaler = None
+    multimodal_selector = None
+    multimodal_feature_cols = None
+    multimodal_selected_features = None
+
+    if os.path.exists(os.path.join(models_dir, "multimodal_voice_model.pkl")):
+        with open(os.path.join(models_dir, "multimodal_voice_model.pkl"), "rb") as f:
+            multimodal_voice_model = pickle.load(f)
+    if os.path.exists(os.path.join(models_dir, "multimodal_voice_scaler.pkl")):
+        with open(os.path.join(models_dir, "multimodal_voice_scaler.pkl"), "rb") as f:
+            multimodal_voice_scaler = pickle.load(f)
+    if os.path.exists(os.path.join(models_dir, "multimodal_selector.pkl")):
+        with open(os.path.join(models_dir, "multimodal_selector.pkl"), "rb") as f:
+            multimodal_selector = pickle.load(f)
+    if os.path.exists(os.path.join(models_dir, "multimodal_feature_columns.json")):
+        with open(os.path.join(models_dir, "multimodal_feature_columns.json"), "r") as f:
+            multimodal_feature_cols = json.load(f)
+    if os.path.exists(os.path.join(models_dir, "multimodal_selected_features.json")):
+        with open(os.path.join(models_dir, "multimodal_selected_features.json"), "r") as f:
+            multimodal_selected_features = json.load(f)
+
     return {
         "primary_et": primary_et,
         "ann_model": ann_model,
@@ -862,49 +902,75 @@ def load_models_and_metadata():
         "benchmarks": benchmarks,
         "selector_60": selector_60,
         "selector_40": selector_40,
-        "test_cohort": test_cohort
+        "test_cohort": test_cohort,
+        "multimodal_voice_model": multimodal_voice_model,
+        "multimodal_voice_scaler": multimodal_voice_scaler,
+        "multimodal_selector": multimodal_selector,
+        "multimodal_feature_cols": multimodal_feature_cols,
+        "multimodal_selected_features": multimodal_selected_features
     }
 
-def run_screening_inference(tremor_df, neck_df, age, gender, model_choice, cached_feats_dict=None):
+def run_screening_inference(tremor_df, neck_df, age, gender, model_choice, cached_feats_dict=None, voice_file=None):
     """Execute live multimodal inference with feature selection and scaling."""
     if cached_feats_dict is not None:
-        feats = cached_feats_dict
+        feats = dict(cached_feats_dict)
     else:
-        feats = extract_patient_features([tremor_df], [neck_df], age=age, gender=gender)
+        v_files = [voice_file] if voice_file is not None else None
+        t_dfs = [tremor_df] if tremor_df is not None else []
+        n_dfs = [neck_df] if neck_df is not None else []
+        feats = extract_patient_features(t_dfs, n_dfs, age=age, gender=gender, voice_files=v_files)
 
-    feature_cols = artifacts["feature_cols"]
-    x_vec = np.zeros(len(feature_cols), dtype=float)
-    for idx, c in enumerate(feature_cols):
-        x_vec[idx] = safe_float(feats.get(c, 0.0))
+    # If voice_file is provided and feats doesn't have non-zero voice features yet, extract directly
+    if voice_file is not None and not any(k.startswith('voice_') and feats.get(k, 0.0) != 0.0 for k in feats):
+        v_feats = extract_voice_features(voice_file)
+        feats.update(v_feats)
 
-    x_vec = np.nan_to_num(x_vec, nan=0.0, posinf=0.0, neginf=0.0)
-    x_scaled = artifacts["scaler"].transform([x_vec])
-    x_scaled = np.nan_to_num(x_scaled, nan=0.0, posinf=0.0, neginf=0.0)
-
-    if "ExtraTrees" in model_choice:
-        x_in = artifacts["selector_60"].transform(x_scaled)
-        model = artifacts["primary_et"]
-        used_feats = artifacts["selected_60"]
-    elif "Compact ANN" in model_choice:
-        x_in = artifacts["selector_40"].transform(x_scaled)
-        model = artifacts["ann_model"]
-        used_feats = artifacts["selected_40"]
-    elif "Random Forest" in model_choice:
-        x_in = artifacts["selector_60"].transform(x_scaled)
-        model = artifacts["rf_model"]
-        used_feats = artifacts["selected_60"]
-    elif "Gradient Boosting" in model_choice and artifacts["gb_model"] is not None:
-        x_in = artifacts["selector_40"].transform(x_scaled)
-        model = artifacts["gb_model"]
-        used_feats = artifacts["selected_40"]
-    elif "Logistic Regression" in model_choice and artifacts["lr_model"] is not None:
-        x_in = artifacts["selector_40"].transform(x_scaled)
-        model = artifacts["lr_model"]
-        used_feats = artifacts["selected_40"]
+    # Check if multimodal voice model is selected
+    if "Multimodal" in model_choice and "Voice" in model_choice and artifacts.get("multimodal_voice_model") is not None:
+        mm_cols = artifacts["multimodal_feature_cols"]
+        x_vec = np.zeros(len(mm_cols), dtype=float)
+        for idx, c in enumerate(mm_cols):
+            x_vec[idx] = safe_float(feats.get(c, 0.0))
+        x_vec = np.nan_to_num(x_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        x_scaled = artifacts["multimodal_voice_scaler"].transform([x_vec])
+        x_scaled = np.nan_to_num(x_scaled, nan=0.0, posinf=0.0, neginf=0.0)
+        x_in = artifacts["multimodal_selector"].transform(x_scaled)
+        model = artifacts["multimodal_voice_model"]
+        used_feats = artifacts["multimodal_selected_features"]
     else:
-        x_in = artifacts["selector_40"].transform(x_scaled)
-        model = artifacts["svm_model"]
-        used_feats = artifacts["selected_40"]
+        feature_cols = artifacts["feature_cols"]
+        x_vec = np.zeros(len(feature_cols), dtype=float)
+        for idx, c in enumerate(feature_cols):
+            x_vec[idx] = safe_float(feats.get(c, 0.0))
+
+        x_vec = np.nan_to_num(x_vec, nan=0.0, posinf=0.0, neginf=0.0)
+        x_scaled = artifacts["scaler"].transform([x_vec])
+        x_scaled = np.nan_to_num(x_scaled, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if "ExtraTrees" in model_choice:
+            x_in = artifacts["selector_60"].transform(x_scaled)
+            model = artifacts["primary_et"]
+            used_feats = artifacts["selected_60"]
+        elif "Compact ANN" in model_choice:
+            x_in = artifacts["selector_40"].transform(x_scaled)
+            model = artifacts["ann_model"]
+            used_feats = artifacts["selected_40"]
+        elif "Random Forest" in model_choice:
+            x_in = artifacts["selector_60"].transform(x_scaled)
+            model = artifacts["rf_model"]
+            used_feats = artifacts["selected_60"]
+        elif "Gradient Boosting" in model_choice and artifacts.get("gb_model") is not None:
+            x_in = artifacts["selector_40"].transform(x_scaled)
+            model = artifacts["gb_model"]
+            used_feats = artifacts["selected_40"]
+        elif "Logistic Regression" in model_choice and artifacts.get("lr_model") is not None:
+            x_in = artifacts["selector_40"].transform(x_scaled)
+            model = artifacts["lr_model"]
+            used_feats = artifacts["selected_40"]
+        else:
+            x_in = artifacts["selector_40"].transform(x_scaled)
+            model = artifacts["svm_model"]
+            used_feats = artifacts["selected_40"]
 
     pred_label = model.predict(x_in)[0]
     classes = list(model.classes_)
@@ -1097,6 +1163,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ Active Model")
 model_options = [
     "ExtraTrees (Primary v9, 60 features) [Poster Match: 63.6%]",
+    "Multimodal ExtraTrees + Voice Phonation (Voice + Tremor + Neck)",
     "Compact ANN (ANN_top40, 40 features)",
     "Multimodal Random Forest (60 features)",
     "Support Vector Machine (SVM RBF, 40 features)",
@@ -1311,11 +1378,11 @@ if menu == "🏠 Overview":
             <div class="panel-subtitle">Records by measurement modality</div>
             <div class="modality-row">
                 <div class="modality-header">
-                    <span>Voice</span>
-                    <span>308 files</span>
+                    <span>Voice phonation (ESP32 INMP441)</span>
+                    <span>300 files (16 kHz • Processed)</span>
                 </div>
                 <div style="background:#e2e8f0; height:8px; border-radius:4px; overflow:hidden;">
-                    <div style="background:#0284c7; width:45%; height:100%;"></div>
+                    <div style="background:#0284c7; width:95%; height:100%;"></div>
                 </div>
             </div>
             <div class="modality-row">
@@ -1419,6 +1486,7 @@ elif menu == "👥 Patients":
             p_row = metadata_df[metadata_df['pid'] == inspected_pid].iloc[0]
 
             t_files, n_files = find_patient_sensor_files(inspected_pid)
+            v_files = find_patient_voice_files(inspected_pid)
 
             p_weight_disp = format_weight(p_row.get('Weight'))
             p_tsh_disp = format_tsh(p_row.get('TSH'))
@@ -1442,7 +1510,7 @@ elif menu == "👥 Patients":
                         <span style="color:#0f766e; font-weight:700;">FT4:</span> <span style="color:#0f172a; font-weight:600;">{p_ft4_disp}</span> &nbsp;|&nbsp;
                         <span style="color:#0f766e; font-weight:700;">Benchmark:</span> <span style="color:#0f172a; font-weight:600;">{p_status_disp}</span>
                     </div>
-                    <div style="margin-top:8px; font-size:0.85rem; color:#475569;"><b>Stored Files:</b> {len(t_files)} Tremor CSVs, {len(n_files)} Neck Distance CSVs</div>
+                    <div style="margin-top:8px; font-size:0.85rem; color:#475569;"><b>Stored Files:</b> {len(t_files)} Tremor CSVs, {len(n_files)} Neck Distance CSVs, {len(v_files)} Phonation WAVs</div>
                 </div>
                 """, unsafe_allow_html=True)
             with col_i2:
@@ -1668,12 +1736,14 @@ elif menu == "📊 Sensor Data":
         else:
             st.warning(f"No recordings found on disk for {sel_patient}.")
     else:
-        st.markdown("Upload custom tremor and neck distance CSVs from ESP32:")
-        v_c1, v_c2 = st.columns(2)
+        st.markdown("Upload custom tremor, neck distance CSVs and phonation WAV from ESP32:")
+        v_c1, v_c2, v_c3 = st.columns(3)
         with v_c1:
             up_v_t = st.file_uploader("Upload Tremor CSV:", type=["csv"], key="viz_up_t")
         with v_c2:
             up_v_n = st.file_uploader("Upload Neck CSV:", type=["csv"], key="viz_up_n")
+        with v_c3:
+            up_v_v = st.file_uploader("Upload Phonation WAV (.wav) [Optional]:", type=["wav"], key="viz_up_v")
         if up_v_t is not None and up_v_n is not None:
             try:
                 df_tremor = pd.read_csv(up_v_t)
@@ -1773,6 +1843,79 @@ elif menu == "📊 Sensor Data":
             st.pyplot(fig)
             plt.close(fig)
 
+        # Voice Phonation Analysis Section
+        st.markdown("---")
+        st.markdown("#### 🎙️ Acoustic Voice Phonation Analysis (ESP32 INMP441 Microphone)")
+
+        voice_target = None
+        if viz_source == "Select from Cohort Patients (127 Subjects)":
+            v_files = find_patient_voice_files(sel_patient)
+            if v_files:
+                voice_target = v_files[0]
+        else:
+            if up_v_v is not None:
+                voice_target = up_v_v
+
+        if voice_target is not None:
+            try:
+                if isinstance(voice_target, str):
+                    with open(voice_target, "rb") as vf:
+                        v_audio_bytes = vf.read()
+                    fs_v, audio_data = wavfile.read(voice_target)
+                else:
+                    voice_target.seek(0)
+                    v_audio_bytes = voice_target.read()
+                    voice_target.seek(0)
+                    fs_v, audio_data = wavfile.read(io.BytesIO(v_audio_bytes))
+
+                if audio_data.ndim > 1:
+                    audio_data = audio_data[:, 0]
+                if np.issubdtype(audio_data.dtype, np.integer):
+                    max_v = float(np.iinfo(audio_data.dtype).max)
+                    audio_norm = audio_data.astype(np.float32) / max_v
+                else:
+                    audio_norm = audio_data.astype(np.float32)
+
+                st.audio(v_audio_bytes, format="audio/wav")
+
+                v_time = np.arange(len(audio_norm)) / float(fs_v)
+
+                col_v1, col_v2 = st.columns(2)
+                with col_v1:
+                    st.markdown("##### 🌊 Phonation Waveform (Time vs Amplitude)")
+                    fig_v, ax_v = plt.subplots(figsize=(8, 3.5))
+                    ax_v.plot(v_time, audio_norm, color='#0d9488', lw=0.8)
+                    ax_v.set_xlabel("Time (seconds)")
+                    ax_v.set_ylabel("Normalized Amplitude")
+                    ax_v.set_title(f"Acoustic Waveform (fs={fs_v} Hz, {len(audio_norm)/fs_v:.1f}s)")
+                    ax_v.grid(True, alpha=0.3)
+                    st.pyplot(fig_v)
+                    plt.close(fig_v)
+
+                with col_v2:
+                    st.markdown("##### 🌈 Phonation Spectrogram (0–4 kHz Formant Analysis)")
+                    fig_sp, ax_sp = plt.subplots(figsize=(8, 3.5))
+                    ax_sp.specgram(audio_norm, NFFT=512, Fs=fs_v, noverlap=256, cmap='inferno')
+                    ax_sp.set_ylim(0, 4000)
+                    ax_sp.set_xlabel("Time (seconds)")
+                    ax_sp.set_ylabel("Frequency (Hz)")
+                    ax_sp.set_title("Vocal Formants (F1, F2, F3 Range)")
+                    st.pyplot(fig_sp)
+                    plt.close(fig_sp)
+
+                v_feats = extract_voice_features(voice_target)
+                st.markdown("##### 🔬 Phonation Acoustic Descriptors")
+                card_v1, card_v2, card_v3, card_v4, card_v5 = st.columns(5)
+                card_v1.metric("Fundamental Pitch (F₀)", f"{v_feats.get('voice_f0_mean', 0.0):.1f} Hz")
+                card_v2.metric("Pitch Jitter", f"{v_feats.get('voice_jitter_pct', 0.0):.2f}%")
+                card_v3.metric("Amplitude Shimmer", f"{v_feats.get('voice_shimmer_pct', 0.0):.2f}%")
+                card_v4.metric("Harmonics-to-Noise", f"{v_feats.get('voice_hnr_db', 0.0):.1f} dB")
+                card_v5.metric("Stability Index", f"{v_feats.get('voice_stability_index', 0.0):.1f} / 100")
+            except Exception as e:
+                st.warning(f"Could not parse voice audio recording: {e}")
+        else:
+            st.info("ℹ️ No phonation audio file loaded for this selection. For cohort patients, select a participant with voice recordings or upload a custom WAV file.")
+
 
 # ==========================================================
 # MODULE 6: 🩺 MACHINE LEARNING (Screening Engine)
@@ -1812,10 +1955,12 @@ elif menu == "🩺 Machine Learning":
             data_source_opts,
             key="ml_data_source"
         )
+        voice_override = st.file_uploader("Upload / Override Phonation (.wav) [Optional]:", type=["wav"], key="ml_voice_uploader")
 
     with col_input:
         tremor_df = None
         neck_df = None
+        voice_file = None
         selected_pid = "DEMO"
         actual_label = None
         actual_tsh = None
@@ -1834,6 +1979,9 @@ elif menu == "🩺 Machine Learning":
             actual_tsh = tshs[idx]
 
             t_files, n_files = find_patient_sensor_files(selected_pid)
+            v_files = find_patient_voice_files(selected_pid)
+            if v_files:
+                voice_file = v_files[0]
             if t_files and n_files:
                 tremor_df = pd.read_csv(t_files[0])
                 neck_df = pd.read_csv(n_files[0])
@@ -1870,6 +2018,9 @@ elif menu == "🩺 Machine Learning":
                 selected_pid = st.selectbox("Select Patient ID:", all_pids, key="ml_cohort_selectbox")
 
             t_files, n_files = find_patient_sensor_files(selected_pid)
+            v_files = find_patient_voice_files(selected_pid)
+            if v_files:
+                voice_file = v_files[0]
             if t_files and n_files:
                 tremor_df = pd.read_csv(t_files[0])
                 neck_df = pd.read_csv(n_files[0])
@@ -1879,12 +2030,17 @@ elif menu == "🩺 Machine Learning":
 
         elif data_source == "Upload Custom Sensor CSVs (ESP32 Live Data)":
             selected_pid = "CUSTOM_UPLOAD"
-            st.markdown("Upload raw sensor CSV exports from the ESP32 data logger:")
-            up_c1, up_c2 = st.columns(2)
+            st.markdown("Upload raw sensor files from the ESP32 data logger:")
+            up_c1, up_c2, up_c3 = st.columns(3)
             with up_c1:
                 up_tremor = st.file_uploader("Hand Tremor CSV (`tremor_*.csv`):", type=["csv"], key="live_up_t")
             with up_c2:
                 up_neck = st.file_uploader("Neck Distance CSV (`neck_*.csv`):", type=["csv"], key="live_up_n")
+            with up_c3:
+                up_voice = st.file_uploader("Phonation Audio (`voice_*.wav`):", type=["wav"], key="live_up_v")
+
+            if up_voice is not None:
+                voice_file = up_voice
 
             if up_tremor is not None and up_neck is not None:
                 try:
@@ -1894,14 +2050,27 @@ elif menu == "🩺 Machine Learning":
                 except Exception as e:
                     st.error(f"Error reading uploaded CSVs: {e}")
             else:
-                st.info("Please upload both tremor and neck CSV files to initiate screening.")
+                st.info("Please upload tremor and neck CSV files to initiate screening.")
 
         else:
             selected_pid = "TH054"
             t_files, n_files = find_patient_sensor_files("TH054")
+            v_files = find_patient_voice_files("TH054")
+            if v_files:
+                voice_file = v_files[0]
             tremor_df = pd.read_csv(t_files[0])
             neck_df = pd.read_csv(n_files[0])
             st.info("Loaded reference benchmark patient **TH054**.")
+
+        if voice_override is not None:
+            voice_file = voice_override
+
+    with col_meta:
+        if voice_file is not None:
+            v_desc = getattr(voice_file, 'name', os.path.basename(str(voice_file)))
+            st.markdown(f'<div style="font-size:0.8rem; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; padding:6px 10px; border-radius:6px; margin-top:8px;">🎙️ <b>Phonation Audio:</b> Attached ({v_desc})</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="font-size:0.8rem; color:#64748b; background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; margin-top:8px;">🎙️ <b>Phonation Audio:</b> Default baseline vector</div>', unsafe_allow_html=True)
 
     # Patient Demographic Metadata Bar (De-identified & Privacy Protected)
     if not metadata_df.empty and selected_pid != "CUSTOM_UPLOAD":
@@ -1956,7 +2125,8 @@ elif menu == "🩺 Machine Learning":
     if has_valid_inputs:
         pred_label, prob_dict, feats, used_feats = run_screening_inference(
             tremor_df, neck_df, age=age_in, gender=gender_in,
-            model_choice=selected_model_name, cached_feats_dict=cached_feat_dict
+            model_choice=selected_model_name, cached_feats_dict=cached_feat_dict,
+            voice_file=voice_file
         )
 
         st.markdown("### 📋 Screening Assessment Results")
@@ -2015,13 +2185,22 @@ elif menu == "🩺 Machine Learning":
         st.markdown("---")
 
         # Key Biophysical Biomarkers
-        st.markdown("##### 🔬 Extracted Biomarker Indicators")
+        st.markdown("##### 🖐️ Hand Tremor & Neck Surface Distance Indicators")
         bio_c1, bio_c2, bio_c3, bio_c4, bio_c5 = st.columns(5)
         bio_c1.metric("8–12 Hz Tremor Ratio", f"{feats.get('tremor_amag_ratio_8_12', 0.0)*100:.1f}%")
         bio_c2.metric("Dominant Tremor Freq", f"{feats.get('tremor_amag_dom_freq', 0.0):.1f} Hz")
         bio_c3.metric("Tremor RMS Accel", f"{feats.get('tremor_amag_rms', 0.0):.2f} m/s²")
         bio_c4.metric("Neck Surface Distance", f"{feats.get('neck_mean_mm', 0.0):.1f} mm")
         bio_c5.metric("Neck Displacement Std", f"{feats.get('neck_std_mm', 0.0):.2f} mm")
+
+        # Acoustic Voice Biomarkers
+        st.markdown("##### 🎙️ Phonation Acoustic Biomarkers (ESP32 INMP441 Phonation)")
+        v_c1, v_c2, v_c3, v_c4, v_c5 = st.columns(5)
+        v_c1.metric("Fundamental Pitch (F₀)", f"{feats.get('voice_f0_mean', 0.0):.1f} Hz")
+        v_c2.metric("Pitch Jitter", f"{feats.get('voice_jitter_pct', 0.0):.2f}%")
+        v_c3.metric("Amplitude Shimmer", f"{feats.get('voice_shimmer_pct', 0.0):.2f}%")
+        v_c4.metric("Harmonics-to-Noise", f"{feats.get('voice_hnr_db', 0.0):.1f} dB")
+        v_c5.metric("Stability Index", f"{feats.get('voice_stability_index', 0.0):.1f} / 100")
 
         # Explainable AI feature attribution
         with st.expander("🔍 Explainable AI (XAI) — Top Contributing Features"):
@@ -2104,8 +2283,10 @@ elif menu == "📄 Reports":
 
     # Load sensor files & extract features
     t_files, n_files = find_patient_sensor_files(rep_pid)
+    v_files = find_patient_voice_files(rep_pid)
     tremor_df = pd.read_csv(t_files[0]) if t_files else None
     neck_df = pd.read_csv(n_files[0]) if n_files else None
+    voice_file = v_files[0] if v_files else None
 
     # Check if in held-out test cohort
     cached_feats = None
@@ -2115,7 +2296,8 @@ elif menu == "📄 Reports":
     if tremor_df is not None or cached_feats is not None:
         pred_label, prob_dict, feats, used_feats = run_screening_inference(
             tremor_df, neck_df, age=p_age, gender=p_gender,
-            model_choice=selected_model_name, cached_feats_dict=cached_feats
+            model_choice=selected_model_name, cached_feats_dict=cached_feats,
+            voice_file=voice_file
         )
     else:
         pred_label = "Normal"
@@ -2125,7 +2307,12 @@ elif menu == "📄 Reports":
             'tremor_amag_dom_freq': 9.2,
             'tremor_amag_rms': 0.42,
             'neck_mean_mm': 51.4,
-            'neck_std_mm': 0.35
+            'neck_std_mm': 0.35,
+            'voice_f0_mean': 195.0,
+            'voice_jitter_pct': 0.45,
+            'voice_shimmer_pct': 2.10,
+            'voice_hnr_db': 18.5,
+            'voice_stability_index': 88.0
         }
 
     # Clinical notes input
@@ -2182,7 +2369,10 @@ elif menu == "📄 Reports":
                 &bull; 8–12 Hz Tremor Ratio: <b>{feats.get('tremor_amag_ratio_8_12', 0.0)*100:.1f}%</b><br>
                 &bull; Dominant Frequency: <b>{feats.get('tremor_amag_dom_freq', 0.0):.1f} Hz</b><br>
                 &bull; RMS Acceleration: <b>{feats.get('tremor_amag_rms', 0.0):.2f} m/s²</b><br>
-                &bull; Neck Surface Distance: <b>{feats.get('neck_mean_mm', 0.0):.1f} &plusmn; {feats.get('neck_std_mm', 0.0):.2f} mm</b>
+                &bull; Neck Surface Distance: <b>{feats.get('neck_mean_mm', 0.0):.1f} &plusmn; {feats.get('neck_std_mm', 0.0):.2f} mm</b><br>
+                &bull; Phonation Pitch (F₀): <b>{feats.get('voice_f0_mean', 0.0):.1f} Hz</b><br>
+                &bull; Jitter / Shimmer: <b>{feats.get('voice_jitter_pct', 0.0):.2f}% / {feats.get('voice_shimmer_pct', 0.0):.2f}%</b><br>
+                &bull; Acoustic HNR: <b>{feats.get('voice_hnr_db', 0.0):.1f} dB</b> (Stability: <b>{feats.get('voice_stability_index', 0.0):.1f}</b>)
             </div>
             <div>
                 <b>Machine Learning Decision:</b><br>

@@ -8,9 +8,12 @@ Extracts 416 time-domain, spectral, and biophysical descriptors from:
 
 import numpy as np
 import pandas as pd
-from scipy import stats, signal
+from scipy import stats, signal, fftpack
+import scipy.io.wavfile as wavfile
+import io
 
 SAMPLING_RATE_TREMOR = 100.0  # 100 Hz nominal ESP32 rate
+SAMPLING_RATE_VOICE = 16000.0  # 16 kHz nominal ESP32 INMP441 rate
 
 def safe_float(v, default=0.0):
     try:
@@ -348,9 +351,285 @@ def extract_neck_features(df_neck):
 
     return feats
 
-def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female'):
+def compute_mfcc_features(sig, fs=SAMPLING_RATE_VOICE, num_ceps=13, n_filt=26, nfft=512):
     """
-    Aggregates multi-trial tremor and neck features at the patient level
+    Computes Mel-Frequency Cepstral Coefficients (MFCCs) using standard filterbanks and DCT-II.
+    Returns 1D array of length num_ceps (mean MFCC across frames).
+    """
+    sig = np.asarray(sig, dtype=float)
+    sig = sig[np.isfinite(sig)]
+    if len(sig) < 160:
+        return np.zeros(num_ceps, dtype=float)
+
+    # Pre-emphasis
+    emphasized = np.append(sig[0], sig[1:] - 0.97 * sig[:-1])
+
+    # Framing
+    frame_len = int(0.025 * fs)  # 400 samples (25 ms)
+    hop_len = int(0.010 * fs)    # 160 samples (10 ms)
+    num_frames = max(1, 1 + int((len(emphasized) - frame_len) / hop_len))
+    pad_len = (num_frames - 1) * hop_len + frame_len
+    if len(emphasized) < pad_len:
+        emphasized = np.pad(emphasized, (0, pad_len - len(emphasized)))
+
+    indices = (np.tile(np.arange(0, frame_len), (num_frames, 1)) +
+               np.tile(np.arange(0, num_frames * hop_len, hop_len), (frame_len, 1)).T)
+    frames = emphasized[indices.astype(np.int32, copy=False)] * np.hamming(frame_len)
+
+    # Magnitude and power spectrum
+    mag_frames = np.absolute(np.fft.rfft(frames, nfft))
+    pow_frames = (1.0 / nfft) * (mag_frames ** 2)
+
+    # Mel scale filterbank
+    low_mel = 0.0
+    high_mel = 2595.0 * np.log10(1.0 + (fs / 2.0) / 700.0)
+    mel_pts = np.linspace(low_mel, high_mel, n_filt + 2)
+    hz_pts = 700.0 * (10.0 ** (mel_pts / 2595.0) - 1.0)
+    bin_pts = np.floor((nfft + 1) * hz_pts / fs).astype(int)
+
+    fbank = np.zeros((n_filt, int(np.floor(nfft / 2 + 1))))
+    for m in range(1, n_filt + 1):
+        for k in range(bin_pts[m - 1], bin_pts[m]):
+            fbank[m - 1, k] = (k - bin_pts[m - 1]) / max(bin_pts[m] - bin_pts[m - 1], 1)
+        for k in range(bin_pts[m], bin_pts[m + 1]):
+            fbank[m - 1, k] = (bin_pts[m + 1] - k) / max(bin_pts[m + 1] - bin_pts[m], 1)
+
+    fb_energy = np.dot(pow_frames, fbank.T)
+    fb_energy = np.where(fb_energy <= 0, 1e-12, fb_energy)
+    fb_energy = 20.0 * np.log10(fb_energy)
+    mfcc_mat = fftpack.dct(fb_energy, type=2, axis=1, norm='ortho')[:, :num_ceps]
+    return np.mean(mfcc_mat, axis=0)
+
+def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
+    """
+    Extracts clinical acoustic phonation descriptors from an audio file, bytes,
+    array, or dataframe (sampled nominally at 16,000 Hz recorded via ESP32 INMP441).
+    Descriptors extracted:
+    - Temporal: RMS energy, Zero Crossing Rate (ZCR), amplitude envelope.
+    - Pitch & Perturbation: F0 (via normalized autocorrelation/peak picking),
+      Jitter (pitch perturbation), Shimmer (amplitude perturbation), and HNR.
+    - Spectral & Cepstral: Spectral Centroid, Spectral Spread, Spectral Rolloff (85%),
+      Spectral Flatness, and 13 MFCC coefficients.
+    Robustness:
+    - Noise gating removes silence and microphone hiss.
+    - Zero NaNs or Infs (all features strictly finite floats).
+    - Missing/corrupt audio gracefully returns default baseline dictionary.
+    """
+    # Canonical baseline dictionary with zero/default baseline vectors
+    default_feats = {
+        'voice_rms': 0.0,
+        'voice_zcr': 0.0,
+        'voice_amp_env_mean': 0.0,
+        'voice_amp_env_std': 0.0,
+        'voice_amp_env_max': 0.0,
+        'voice_f0_mean': 0.0,
+        'voice_f0_std': 0.0,
+        'voice_f0_min': 0.0,
+        'voice_f0_max': 0.0,
+        'voice_jitter_pct': 0.0,
+        'voice_shimmer_pct': 0.0,
+        'voice_hnr_db': 0.0,
+        'voice_stability_index': 0.0,
+        'voice_spectral_centroid': 0.0,
+        'voice_spectral_spread': 0.0,
+        'voice_spectral_rolloff': 0.0,
+        'voice_spectral_flatness': 0.0,
+        'voice_duration_sec': 0.0,
+        'voice_sample_count': 0.0,
+    }
+    for i in range(1, 14):
+        default_feats[f'voice_mfcc_{i}'] = 0.0
+    default_feats['voice_mfcc_mean'] = 0.0
+    default_feats['voice_mfcc_std'] = 0.0
+
+    if source is None:
+        return default_feats
+
+    sig = None
+    try:
+        if isinstance(source, (str, bytes, io.BytesIO)) or hasattr(source, 'read'):
+            if isinstance(source, str):
+                if source.endswith('.csv'):
+                    df_v = pd.read_csv(source)
+                    col = next((c for c in ['amplitude_pcm16', 'amplitude', 'val'] if c in df_v.columns), df_v.columns[-1])
+                    raw = pd.to_numeric(df_v[col], errors='coerce').fillna(0).values
+                    sig = raw.astype(np.float32) / 32768.0
+                else:
+                    read_fs, data = wavfile.read(source)
+                    fs = float(read_fs)
+                    if data.dtype == np.int16:
+                        sig = data.astype(np.float32) / 32768.0
+                    elif data.dtype == np.int32:
+                        sig = data.astype(np.float32) / 2147483648.0
+                    else:
+                        sig = data.astype(np.float32)
+            else:
+                raw_bytes = source.read() if hasattr(source, 'read') else (source.getvalue() if hasattr(source, 'getvalue') else source)
+                buf = io.BytesIO(raw_bytes)
+                read_fs, data = wavfile.read(buf)
+                fs = float(read_fs)
+                if data.dtype == np.int16:
+                    sig = data.astype(np.float32) / 32768.0
+                elif data.dtype == np.int32:
+                    sig = data.astype(np.float32) / 2147483648.0
+                else:
+                    sig = data.astype(np.float32)
+        elif isinstance(source, np.ndarray):
+            sig = source.astype(np.float32)
+        elif hasattr(source, 'columns'):
+            col = next((c for c in ['amplitude_pcm16', 'amplitude', 'val'] if c in source.columns), source.columns[-1])
+            raw = pd.to_numeric(source[col], errors='coerce').fillna(0).values
+            sig = raw.astype(np.float32) / 32768.0
+    except Exception:
+        return default_feats
+
+    if sig is None:
+        return default_feats
+
+    # Mono conversion
+    if sig.ndim > 1:
+        sig = np.mean(sig, axis=-1)
+
+    sig = sig[np.isfinite(sig)]
+    n = len(sig)
+    if n < 160:
+        return default_feats
+
+    duration_sec = float(n / fs)
+
+    # 1. Temporal Features (RMS, ZCR, Envelope)
+    rms_val = float(np.sqrt(np.mean(sig ** 2)))
+    zcr_val = float(np.sum(np.diff(sig > 0) != 0) / max(n - 1, 1))
+
+    # Amplitude Envelope via Hilbert transform
+    try:
+        analytic = signal.hilbert(sig)
+        amp_env = np.abs(analytic)
+        amp_mean = float(np.mean(amp_env))
+        amp_std = float(np.std(amp_env))
+        amp_max = float(np.max(amp_env))
+    except Exception:
+        amp_env = np.abs(sig)
+        amp_mean = float(np.mean(amp_env))
+        amp_std = float(np.std(amp_env))
+        amp_max = float(np.max(amp_env))
+
+    # Noise Gating (Threshold to isolate active phonation frames from silence/hiss)
+    frame_len = int(0.025 * fs)  # 400 samples (25 ms)
+    hop_len = int(0.010 * fs)    # 160 samples (10 ms)
+    num_frames = (n - frame_len) // hop_len
+    if num_frames > 0:
+        frame_energies = [np.sqrt(np.mean(sig[i * hop_len: i * hop_len + frame_len] ** 2)) for i in range(num_frames)]
+        max_e = max(frame_energies) if frame_energies else 0.0
+        gate_thresh = max(0.005, 0.10 * max_e)
+        active_indices = [i for i, e in enumerate(frame_energies) if e >= gate_thresh]
+    else:
+        active_indices = []
+
+    # 2. Pitch ($F_0$), Jitter, Shimmer, HNR via normalized autocorrelation / peak picking
+    # Vocal range: 70 Hz (lag 228 at 16kHz) to 500 Hz (lag 32 at 16kHz)
+    min_lag = max(10, int(fs / 500.0))
+    max_lag = min(len(sig) - 1, int(fs / 70.0))
+    f0_list = []
+    peak_r_list = []
+    peak_amp_list = []
+
+    for idx in active_indices:
+        f_start = idx * hop_len
+        f_slice = sig[f_start: f_start + frame_len]
+        f_detrend = f_slice - np.mean(f_slice)
+        denom = np.sum(f_detrend ** 2)
+        if denom < 1e-8:
+            continue
+        corr = np.correlate(f_detrend, f_detrend, mode='full')[len(f_detrend) - 1:]
+        corr_norm = corr / (denom + 1e-12)
+        if len(corr_norm) > max_lag:
+            search_region = corr_norm[min_lag:max_lag]
+            best_idx = np.argmax(search_region)
+            best_lag = min_lag + best_idx
+            best_r = search_region[best_idx]
+            if best_r > 0.25:
+                f0_list.append(float(fs / best_lag))
+                peak_r_list.append(float(best_r))
+                peak_amp_list.append(float(np.max(np.abs(f_slice))))
+
+    if len(f0_list) > 0:
+        f0_arr = np.array(f0_list)
+        f0_mean = float(np.mean(f0_arr))
+        f0_std = float(np.std(f0_arr))
+        f0_min = float(np.min(f0_arr))
+        f0_max = float(np.max(f0_arr))
+
+        if len(f0_arr) > 1:
+            periods = 1.0 / f0_arr
+            jitter_pct = float(np.mean(np.abs(np.diff(periods))) / (np.mean(periods) + 1e-9) * 100.0)
+            amps = np.array(peak_amp_list)
+            shimmer_pct = float(np.mean(np.abs(np.diff(amps))) / (np.mean(amps) + 1e-9) * 100.0)
+        else:
+            jitter_pct, shimmer_pct = 0.0, 0.0
+
+        mean_r = np.clip(np.mean(peak_r_list), 0.01, 0.999)
+        hnr_db = float(10.0 * np.log10(mean_r / (1.0 - mean_r + 1e-9)))
+        hnr_db = max(0.0, min(40.0, hnr_db))
+        stability_index = max(0.0, min(100.0, 100.0 - 2.5 * jitter_pct - 1.5 * shimmer_pct + 0.5 * hnr_db))
+    else:
+        f0_mean, f0_std, f0_min, f0_max = 0.0, 0.0, 0.0, 0.0
+        jitter_pct, shimmer_pct, hnr_db, stability_index = 0.0, 0.0, 0.0, 0.0
+
+    # 3. Spectral Descriptors (Centroid, Spread, Rolloff 85%, Flatness)
+    nperseg = min(1024, n)
+    freqs, psd = signal.welch(sig - np.mean(sig), fs=fs, nperseg=nperseg)
+    psd = np.nan_to_num(psd, nan=0.0, posinf=0.0, neginf=0.0)
+    psd_sum = np.sum(psd) + 1e-12
+    norm_psd = psd / psd_sum
+
+    spec_centroid = float(np.sum(freqs * norm_psd))
+    spec_spread = float(np.sqrt(max(0.0, np.sum(((freqs - spec_centroid) ** 2) * norm_psd))))
+
+    # Spectral Rolloff 85%
+    cum_psd = np.cumsum(norm_psd)
+    rolloff_idx = np.searchsorted(cum_psd, 0.85)
+    spec_rolloff = float(freqs[min(rolloff_idx, len(freqs) - 1)])
+
+    # Spectral Flatness (Wiener entropy)
+    geom_mean = np.exp(np.mean(np.log(np.maximum(psd, 1e-12))))
+    arith_mean = np.mean(psd) + 1e-12
+    spec_flatness = float(geom_mean / arith_mean)
+
+    # 4. 13 MFCC Coefficients
+    mfcc_means = compute_mfcc_features(sig, fs=fs, num_ceps=13)
+
+    feats = {
+        'voice_rms': safe_float(rms_val),
+        'voice_zcr': safe_float(zcr_val),
+        'voice_amp_env_mean': safe_float(amp_mean),
+        'voice_amp_env_std': safe_float(amp_std),
+        'voice_amp_env_max': safe_float(amp_max),
+        'voice_f0_mean': safe_float(f0_mean),
+        'voice_f0_std': safe_float(f0_std),
+        'voice_f0_min': safe_float(f0_min),
+        'voice_f0_max': safe_float(f0_max),
+        'voice_jitter_pct': safe_float(jitter_pct),
+        'voice_shimmer_pct': safe_float(shimmer_pct),
+        'voice_hnr_db': safe_float(hnr_db),
+        'voice_stability_index': safe_float(stability_index),
+        'voice_spectral_centroid': safe_float(spec_centroid),
+        'voice_spectral_spread': safe_float(spec_spread),
+        'voice_spectral_rolloff': safe_float(spec_rolloff),
+        'voice_spectral_flatness': safe_float(spec_flatness),
+        'voice_duration_sec': safe_float(duration_sec),
+        'voice_sample_count': safe_float(n),
+    }
+    for i in range(13):
+        feats[f'voice_mfcc_{i+1}'] = safe_float(mfcc_means[i])
+    feats['voice_mfcc_mean'] = safe_float(np.mean(mfcc_means))
+    feats['voice_mfcc_std'] = safe_float(np.std(mfcc_means))
+
+    return feats
+
+def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female', voice_files=None):
+    """
+    Aggregates multi-trial tremor, neck, and voice features at the patient level
     and adds demographic descriptors.
     """
     # Extract features for all tremor trials
@@ -360,9 +639,17 @@ def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female'):
     tremor_trial_feats = [extract_tremor_features(tdf) for tdf in clean_tdfs] if clean_tdfs else [extract_tremor_features(pd.DataFrame())]
     neck_trial_feats = [extract_neck_features(ndf) for ndf in clean_ndfs] if clean_ndfs else [extract_neck_features(pd.DataFrame())]
 
+    # Voice trials
+    clean_vfiles = [vf for vf in (voice_files or []) if vf is not None]
+    if clean_vfiles:
+        voice_trial_feats = [extract_voice_features(vf) for vf in clean_vfiles]
+    else:
+        voice_trial_feats = [extract_voice_features(None)]
+
     # Aggregate across trials
     df_t = pd.DataFrame(tremor_trial_feats)
     df_n = pd.DataFrame(neck_trial_feats)
+    df_v = pd.DataFrame(voice_trial_feats)
 
     patient_feats = {}
 
@@ -371,6 +658,8 @@ def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female'):
         patient_feats[col] = safe_float(df_t[col].mean())
     for col in df_n.columns:
         patient_feats[col] = safe_float(df_n[col].mean())
+    for col in df_v.columns:
+        patient_feats[col] = safe_float(df_v[col].mean())
 
     # Add inter-trial variation features
     for col in ['tremor_amag_mean', 'tremor_amag_std', 'tremor_gmag_mean', 'tremor_amag_ratio_8_12',
