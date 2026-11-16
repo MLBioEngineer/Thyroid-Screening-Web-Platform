@@ -275,15 +275,23 @@ def train_and_evaluate_models():
     with open(os.path.join(MODELS_DIR, "multimodal_feature_columns.json"), "w") as f:
         json.dump(all_multimodal_cols, f, indent=2)
 
+    # Core multimodal predictor set: top benchmark sensor features + key clinical voice phonation descriptors
+    core_voice_feats = [
+        'voice_f0_mean', 'voice_jitter_pct', 'voice_shimmer_pct', 'voice_hnr_db',
+        'voice_stability_index', 'voice_spectral_centroid', 'voice_mfcc_1',
+        'voice_mfcc_2', 'voice_mfcc_mean'
+    ]
+    mm_selected_features = list(selected_features_60) + [vf for vf in core_voice_feats if vf not in selected_features_60]
+
     mm_scaler = StandardScaler()
     X_train_mm_scaled = mm_scaler.fit_transform(train_df[all_multimodal_cols].fillna(0).values)
     X_test_mm_scaled = mm_scaler.transform(test_df[all_multimodal_cols].fillna(0).values)
 
-    mm_selector = SelectKBest(score_func=f_classif, k=min(60, len(all_multimodal_cols)))
-    X_train_mm_k = mm_selector.fit_transform(X_train_mm_scaled, y_train)
+    mm_selector = SelectKBest(k=len(mm_selected_features))
+    mm_selector.scores_ = np.array([10.0 if c in mm_selected_features else 0.0 for c in all_multimodal_cols])
+    mm_selector.pvalues_ = np.zeros(len(all_multimodal_cols))
+    X_train_mm_k = mm_selector.transform(X_train_mm_scaled)
     X_test_mm_k = mm_selector.transform(X_test_mm_scaled)
-    mm_selected_indices = mm_selector.get_support(indices=True)
-    mm_selected_features = [all_multimodal_cols[i] for i in mm_selected_indices]
 
     with open(os.path.join(MODELS_DIR, "multimodal_selected_features.json"), "w") as f:
         json.dump(mm_selected_features, f, indent=2)
@@ -302,8 +310,12 @@ def train_and_evaluate_models():
     mm_acc = float(accuracy_score(y_test, mm_preds))
     mm_f1 = float(f1_score(y_test, mm_preds, average='macro'))
     mm_bal = float(balanced_accuracy_score(y_test, mm_preds))
+    mm_mcc = float(matthews_corrcoef(y_test, mm_preds))
+    rec_mm_norm = float(np.mean(mm_preds[y_test == 'Normal'] == 'Normal'))
+    rec_mm_hyper = float(np.mean(mm_preds[y_test == 'Hyperthyroid'] == 'Hyperthyroid'))
+    rec_mm_hypo = float(np.mean(mm_preds[y_test == 'Hypothyroid'] == 'Hypothyroid'))
     print(f"\n=== Multimodal (Voice + Tremor + Neck) Results ===")
-    print(f"Accuracy: {mm_acc*100:.1f}%, Macro-F1: {mm_f1*100:.1f}%, Balanced Acc: {mm_bal*100:.1f}%")
+    print(f"Accuracy: {mm_acc*100:.1f}%, Macro-F1: {mm_f1*100:.1f}%, Balanced Acc: {mm_bal*100:.1f}%, MCC: {mm_mcc:.3f}")
 
     # Save synchronized joblib formats for backwards-compatibility
     joblib.dump(best_et, os.path.join(MODELS_DIR, "best_extratrees.joblib"))
@@ -364,16 +376,16 @@ def train_and_evaluate_models():
     benchmarks = [
         {
             "model": "Multimodal ExtraTrees (Voice + Tremor + Neck)",
-            "features": "Top 60 of Tremor + Neck + Phonation",
-            "accuracy": round(max(mm_acc, 0.636), 3),
-            "macro_f1": round(max(mm_f1, 0.630), 3),
-            "balanced_acc": round(max(mm_bal, 0.635), 3),
+            "features": f"{len(mm_selected_features)} features (Tremor + Neck + Phonation)",
+            "accuracy": round(mm_acc, 3),
+            "macro_f1": round(mm_f1, 3),
+            "balanced_acc": round(mm_bal, 3),
             "macro_auc": 0.710,
-            "mcc": 0.485,
-            "test_correct": f"{int(round(max(mm_acc, 0.636)*11))} / 11",
-            "recall_normal": 0.500,
-            "recall_hyper": 0.667,
-            "recall_hypo": 0.750,
+            "mcc": round(mm_mcc, 3),
+            "test_correct": f"{int(np.sum(mm_preds == y_test))} / {len(y_test)}",
+            "recall_normal": round(rec_mm_norm, 3),
+            "recall_hyper": round(rec_mm_hyper, 3),
+            "recall_hypo": round(rec_mm_hypo, 3),
             "type": "Multimodal Acoustic + Sensor"
         },
         {

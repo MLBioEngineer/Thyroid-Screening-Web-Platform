@@ -445,6 +445,13 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
     if source is None:
         return default_feats
 
+    # Rewind stream if seekable
+    if hasattr(source, 'seek'):
+        try:
+            source.seek(0)
+        except Exception:
+            pass
+
     sig = None
     try:
         if isinstance(source, (str, bytes, io.BytesIO)) or hasattr(source, 'read'):
@@ -461,10 +468,18 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
                         sig = data.astype(np.float32) / 32768.0
                     elif data.dtype == np.int32:
                         sig = data.astype(np.float32) / 2147483648.0
+                    elif data.dtype == np.uint8:
+                        sig = (data.astype(np.float32) - 128.0) / 128.0
                     else:
                         sig = data.astype(np.float32)
             else:
                 raw_bytes = source.read() if hasattr(source, 'read') else (source.getvalue() if hasattr(source, 'getvalue') else source)
+                # Rewind seekable source after reading so downstream operations can re-read
+                if hasattr(source, 'seek'):
+                    try:
+                        source.seek(0)
+                    except Exception:
+                        pass
                 buf = io.BytesIO(raw_bytes)
                 read_fs, data = wavfile.read(buf)
                 fs = float(read_fs)
@@ -472,6 +487,8 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
                     sig = data.astype(np.float32) / 32768.0
                 elif data.dtype == np.int32:
                     sig = data.astype(np.float32) / 2147483648.0
+                elif data.dtype == np.uint8:
+                    sig = (data.astype(np.float32) - 128.0) / 128.0
                 else:
                     sig = data.astype(np.float32)
         elif isinstance(source, np.ndarray):
@@ -481,21 +498,36 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
             raw = pd.to_numeric(source[col], errors='coerce').fillna(0).values
             sig = raw.astype(np.float32) / 32768.0
     except Exception:
+        if hasattr(source, 'seek'):
+            try:
+                source.seek(0)
+            except Exception:
+                pass
         return default_feats
 
     if sig is None:
         return default_feats
 
-    # Mono conversion
+    # Mono conversion (handles both channels-last and channels-first audio)
     if sig.ndim > 1:
-        sig = np.mean(sig, axis=-1)
+        if sig.shape[0] <= 8 and sig.shape[1] > sig.shape[0]:
+            sig = np.mean(sig, axis=0)
+        else:
+            sig = np.mean(sig, axis=-1)
 
     sig = sig[np.isfinite(sig)]
     n = len(sig)
     if n < 160:
         return default_feats
 
-    duration_sec = float(n / fs)
+    # Standardize sample rate to SAMPLING_RATE_VOICE (16 kHz nominal INMP441 rate)
+    duration_sec = float(n / fs) if fs > 0 else 0.0
+    if fs > 0 and abs(fs - SAMPLING_RATE_VOICE) > 1.0:
+        target_len = int(round(n * SAMPLING_RATE_VOICE / fs))
+        if target_len >= 160:
+            sig = signal.resample(sig, target_len)
+            fs = SAMPLING_RATE_VOICE
+            n = len(sig)
 
     # 1. Temporal Features (RMS, ZCR, Envelope)
     rms_val = float(np.sqrt(np.mean(sig ** 2)))
@@ -521,7 +553,7 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
     if num_frames > 0:
         frame_energies = [np.sqrt(np.mean(sig[i * hop_len: i * hop_len + frame_len] ** 2)) for i in range(num_frames)]
         max_e = max(frame_energies) if frame_energies else 0.0
-        gate_thresh = max(0.005, 0.10 * max_e)
+        gate_thresh = max(0.002, 0.08 * max_e) if max_e > 0.002 else 0.0
         active_indices = [i for i, e in enumerate(frame_energies) if e >= gate_thresh]
     else:
         active_indices = []
@@ -545,13 +577,26 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
         corr_norm = corr / (denom + 1e-12)
         if len(corr_norm) > max_lag:
             search_region = corr_norm[min_lag:max_lag]
-            best_idx = np.argmax(search_region)
-            best_lag = min_lag + best_idx
-            best_r = search_region[best_idx]
+            best_idx = int(np.argmax(search_region))
+            best_lag = float(min_lag + best_idx)
+            best_r = float(search_region[best_idx])
             if best_r > 0.25:
-                f0_list.append(float(fs / best_lag))
-                peak_r_list.append(float(best_r))
-                peak_amp_list.append(float(np.max(np.abs(f_slice))))
+                # 3-point parabolic peak interpolation for sub-sample precision
+                if 0 < best_idx < len(search_region) - 1:
+                    alpha = float(search_region[best_idx - 1])
+                    beta = float(search_region[best_idx])
+                    gamma = float(search_region[best_idx + 1])
+                    denom_p = alpha - 2.0 * beta + gamma
+                    if abs(denom_p) > 1e-9:
+                        delta = 0.5 * (alpha - gamma) / denom_p
+                        if abs(delta) < 1.0:
+                            best_lag += delta
+                if best_lag > 0:
+                    f0_list.append(float(fs / best_lag))
+                    overlap_ratio = max(0.1, (frame_len - best_lag) / float(frame_len))
+                    norm_r = float(np.clip(best_r / overlap_ratio, 0.0, 1.0))
+                    peak_r_list.append(norm_r)
+                    peak_amp_list.append(float(np.max(np.abs(f_slice))))
 
     if len(f0_list) > 0:
         f0_arr = np.array(f0_list)
@@ -568,7 +613,7 @@ def extract_voice_features(source, fs=SAMPLING_RATE_VOICE):
         else:
             jitter_pct, shimmer_pct = 0.0, 0.0
 
-        mean_r = np.clip(np.mean(peak_r_list), 0.01, 0.999)
+        mean_r = np.clip(np.mean(peak_r_list), 0.01, 0.9999)
         hnr_db = float(10.0 * np.log10(mean_r / (1.0 - mean_r + 1e-9)))
         hnr_db = max(0.0, min(40.0, hnr_db))
         stability_index = max(0.0, min(100.0, 100.0 - 2.5 * jitter_pct - 1.5 * shimmer_pct + 0.5 * hnr_db))
@@ -632,6 +677,23 @@ def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female', voic
     Aggregates multi-trial tremor, neck, and voice features at the patient level
     and adds demographic descriptors.
     """
+    # Normalize tremor_dfs and neck_dfs if passed as single DataFrame or non-iterable
+    if tremor_dfs is not None:
+        if isinstance(tremor_dfs, pd.DataFrame):
+            tremor_dfs = [tremor_dfs]
+        elif not isinstance(tremor_dfs, (list, tuple)):
+            tremor_dfs = [tremor_dfs]
+    else:
+        tremor_dfs = []
+
+    if neck_dfs is not None:
+        if isinstance(neck_dfs, pd.DataFrame):
+            neck_dfs = [neck_dfs]
+        elif not isinstance(neck_dfs, (list, tuple)):
+            neck_dfs = [neck_dfs]
+    else:
+        neck_dfs = []
+
     # Extract features for all tremor trials
     clean_tdfs = [tdf for tdf in tremor_dfs if tdf is not None and len(tdf) > 0]
     clean_ndfs = [ndf for ndf in neck_dfs if ndf is not None and len(ndf) > 0]
@@ -639,8 +701,18 @@ def extract_patient_features(tremor_dfs, neck_dfs, age=40, gender='Female', voic
     tremor_trial_feats = [extract_tremor_features(tdf) for tdf in clean_tdfs] if clean_tdfs else [extract_tremor_features(pd.DataFrame())]
     neck_trial_feats = [extract_neck_features(ndf) for ndf in clean_ndfs] if clean_ndfs else [extract_neck_features(pd.DataFrame())]
 
-    # Voice trials
-    clean_vfiles = [vf for vf in (voice_files or []) if vf is not None]
+    # Voice trials: normalize if passed as single string, BytesIO, UploadedFile, or ndarray
+    if voice_files is not None:
+        if isinstance(voice_files, (str, bytes, io.BytesIO, np.ndarray)) or hasattr(voice_files, 'read'):
+            v_list = [voice_files]
+        elif isinstance(voice_files, (list, tuple)):
+            v_list = list(voice_files)
+        else:
+            v_list = [voice_files]
+    else:
+        v_list = []
+
+    clean_vfiles = [vf for vf in v_list if vf is not None]
     if clean_vfiles:
         voice_trial_feats = [extract_voice_features(vf) for vf in clean_vfiles]
     else:

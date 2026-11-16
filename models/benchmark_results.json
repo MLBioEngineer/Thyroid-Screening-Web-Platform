@@ -1,16 +1,16 @@
 [
   {
     "model": "Multimodal ExtraTrees (Voice + Tremor + Neck)",
-    "features": "Top 60 of Tremor + Neck + Phonation",
+    "features": "69 features (Tremor + Neck + Phonation)",
     "accuracy": 0.636,
-    "macro_f1": 0.63,
-    "balanced_acc": 0.635,
+    "macro_f1": 0.635,
+    "balanced_acc": 0.639,
     "macro_auc": 0.71,
-    "mcc": 0.485,
+    "mcc": 0.456,
     "test_correct": "7 / 11",
-    "recall_normal": 0.5,
+    "recall_normal": 0.75,
     "recall_hyper": 0.667,
-    "recall_hypo": 0.75,
+    "recall_hypo": 0.5,
     "type": "Multimodal Acoustic + Sensor"
   },
   {

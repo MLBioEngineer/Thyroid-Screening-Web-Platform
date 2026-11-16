@@ -786,6 +786,7 @@ def find_patient_voice_files(pid):
     """
     Find patient voice phonation audio WAV files across all date folders.
     Handles all folder naming schemes (e.g., TH030 vs TH30).
+    Prioritizes primary recording takes (voice_T01.wav).
     """
     num_match = re.search(r'\d+', str(pid))
     if not num_match:
@@ -795,7 +796,15 @@ def find_patient_voice_files(pid):
     v_files = []
     for pat in set(patterns):
         v_files.extend(glob.glob(f"Thyroid_Data/**/{pat}/voice_*.wav", recursive=True))
-    return sorted(list(set(v_files)))
+    unique_files = list(set(v_files))
+    def voice_priority(path):
+        bname = os.path.basename(path).lower()
+        if 'voice_t01' in bname:
+            return (0, bname)
+        elif 'voice_t' in bname:
+            return (1, bname)
+        return (2, bname)
+    return sorted(unique_files, key=voice_priority)
 
 def normalize_pid(p):
     """Normalize patient ID to THxxx format."""
@@ -1843,78 +1852,91 @@ elif menu == "📊 Sensor Data":
             st.pyplot(fig)
             plt.close(fig)
 
-        # Voice Phonation Analysis Section
-        st.markdown("---")
-        st.markdown("#### 🎙️ Acoustic Voice Phonation Analysis (ESP32 INMP441 Microphone)")
+    # Voice Phonation Analysis Section
+    st.markdown("---")
+    st.markdown("#### 🎙️ Acoustic Voice Phonation Analysis (ESP32 INMP441 Microphone)")
 
-        voice_target = None
-        if viz_source == "Select from Cohort Patients (127 Subjects)":
-            v_files = find_patient_voice_files(sel_patient)
-            if v_files:
-                voice_target = v_files[0]
-        else:
-            if up_v_v is not None:
-                voice_target = up_v_v
+    voice_target = None
+    if viz_source == "Select from Cohort Patients (127 Subjects)":
+        v_files = find_patient_voice_files(sel_patient)
+        if v_files:
+            voice_target = v_files[0]
+    else:
+        if up_v_v is not None:
+            voice_target = up_v_v
 
-        if voice_target is not None:
-            try:
-                if isinstance(voice_target, str):
-                    with open(voice_target, "rb") as vf:
-                        v_audio_bytes = vf.read()
-                    fs_v, audio_data = wavfile.read(voice_target)
+    if voice_target is not None:
+        try:
+            if isinstance(voice_target, str):
+                with open(voice_target, "rb") as vf:
+                    v_audio_bytes = vf.read()
+                fs_v, audio_data = wavfile.read(voice_target)
+            else:
+                voice_target.seek(0)
+                v_audio_bytes = voice_target.read()
+                voice_target.seek(0)
+                fs_v, audio_data = wavfile.read(io.BytesIO(v_audio_bytes))
+
+            if audio_data.ndim > 1:
+                if audio_data.shape[0] <= 8 and audio_data.shape[1] > audio_data.shape[0]:
+                    audio_data = np.mean(audio_data, axis=0)
                 else:
-                    voice_target.seek(0)
-                    v_audio_bytes = voice_target.read()
-                    voice_target.seek(0)
-                    fs_v, audio_data = wavfile.read(io.BytesIO(v_audio_bytes))
+                    audio_data = np.mean(audio_data, axis=-1)
 
-                if audio_data.ndim > 1:
-                    audio_data = audio_data[:, 0]
-                if np.issubdtype(audio_data.dtype, np.integer):
+            if np.issubdtype(audio_data.dtype, np.integer):
+                if audio_data.dtype == np.uint8:
+                    audio_norm = (audio_data.astype(np.float32) - 128.0) / 128.0
+                else:
                     max_v = float(np.iinfo(audio_data.dtype).max)
                     audio_norm = audio_data.astype(np.float32) / max_v
-                else:
-                    audio_norm = audio_data.astype(np.float32)
+            else:
+                audio_norm = audio_data.astype(np.float32)
 
-                st.audio(v_audio_bytes, format="audio/wav")
+            st.audio(v_audio_bytes, format="audio/wav")
 
-                v_time = np.arange(len(audio_norm)) / float(fs_v)
+            v_time = np.arange(len(audio_norm)) / float(fs_v) if fs_v > 0 else np.zeros(len(audio_norm))
 
-                col_v1, col_v2 = st.columns(2)
-                with col_v1:
-                    st.markdown("##### 🌊 Phonation Waveform (Time vs Amplitude)")
-                    fig_v, ax_v = plt.subplots(figsize=(8, 3.5))
-                    ax_v.plot(v_time, audio_norm, color='#0d9488', lw=0.8)
-                    ax_v.set_xlabel("Time (seconds)")
-                    ax_v.set_ylabel("Normalized Amplitude")
-                    ax_v.set_title(f"Acoustic Waveform (fs={fs_v} Hz, {len(audio_norm)/fs_v:.1f}s)")
-                    ax_v.grid(True, alpha=0.3)
-                    st.pyplot(fig_v)
-                    plt.close(fig_v)
+            col_v1, col_v2 = st.columns(2)
+            with col_v1:
+                st.markdown("##### 🌊 Phonation Waveform (Time vs Amplitude)")
+                fig_v, ax_v = plt.subplots(figsize=(8, 3.5))
+                step = max(1, len(audio_norm) // 10000)
+                ax_v.plot(v_time[::step], audio_norm[::step], color='#0d9488', lw=0.8)
+                ax_v.set_xlabel("Time (seconds)")
+                ax_v.set_ylabel("Normalized Amplitude")
+                dur_disp = len(audio_norm) / fs_v if fs_v > 0 else 0.0
+                ax_v.set_title(f"Acoustic Waveform (fs={fs_v} Hz, {dur_disp:.1f}s)")
+                ax_v.grid(True, alpha=0.3)
+                st.pyplot(fig_v)
+                plt.close(fig_v)
 
-                with col_v2:
-                    st.markdown("##### 🌈 Phonation Spectrogram (0–4 kHz Formant Analysis)")
-                    fig_sp, ax_sp = plt.subplots(figsize=(8, 3.5))
-                    ax_sp.specgram(audio_norm, NFFT=512, Fs=fs_v, noverlap=256, cmap='inferno')
-                    ax_sp.set_ylim(0, 4000)
-                    ax_sp.set_xlabel("Time (seconds)")
-                    ax_sp.set_ylabel("Frequency (Hz)")
-                    ax_sp.set_title("Vocal Formants (F1, F2, F3 Range)")
-                    st.pyplot(fig_sp)
-                    plt.close(fig_sp)
+            with col_v2:
+                st.markdown("##### 🌈 Phonation Spectrogram (0–4 kHz Formant Analysis)")
+                fig_sp, ax_sp = plt.subplots(figsize=(8, 3.5))
+                if len(audio_norm) >= 160:
+                    nfft_val = min(512, int(2 ** np.floor(np.log2(len(audio_norm)))))
+                    noverlap_val = nfft_val // 2
+                    dither = 1e-6 * np.random.randn(len(audio_norm))
+                    ax_sp.specgram(audio_norm + dither, NFFT=nfft_val, Fs=fs_v, noverlap=noverlap_val, cmap='inferno')
+                    ax_sp.set_ylim(0, min(4000, fs_v / 2))
+                ax_sp.set_xlabel("Time (seconds)")
+                ax_sp.set_ylabel("Frequency (Hz)")
+                ax_sp.set_title("Vocal Formants (F1, F2, F3 Range)")
+                st.pyplot(fig_sp)
+                plt.close(fig_sp)
 
-                v_feats = extract_voice_features(voice_target)
-                st.markdown("##### 🔬 Phonation Acoustic Descriptors")
-                card_v1, card_v2, card_v3, card_v4, card_v5 = st.columns(5)
-                card_v1.metric("Fundamental Pitch (F₀)", f"{v_feats.get('voice_f0_mean', 0.0):.1f} Hz")
-                card_v2.metric("Pitch Jitter", f"{v_feats.get('voice_jitter_pct', 0.0):.2f}%")
-                card_v3.metric("Amplitude Shimmer", f"{v_feats.get('voice_shimmer_pct', 0.0):.2f}%")
-                card_v4.metric("Harmonics-to-Noise", f"{v_feats.get('voice_hnr_db', 0.0):.1f} dB")
-                card_v5.metric("Stability Index", f"{v_feats.get('voice_stability_index', 0.0):.1f} / 100")
-            except Exception as e:
-                st.warning(f"Could not parse voice audio recording: {e}")
-        else:
-            st.info("ℹ️ No phonation audio file loaded for this selection. For cohort patients, select a participant with voice recordings or upload a custom WAV file.")
+            v_feats = extract_voice_features(voice_target)
+            st.markdown("##### 🔬 Phonation Acoustic Descriptors")
+            card_v1, card_v2, card_v3, card_v4, card_v5 = st.columns(5)
+            card_v1.metric("Fundamental Pitch (F₀)", f"{v_feats.get('voice_f0_mean', 0.0):.1f} Hz")
+            card_v2.metric("Pitch Jitter", f"{v_feats.get('voice_jitter_pct', 0.0):.2f}%")
+            card_v3.metric("Amplitude Shimmer", f"{v_feats.get('voice_shimmer_pct', 0.0):.2f}%")
+            card_v4.metric("Harmonics-to-Noise", f"{v_feats.get('voice_hnr_db', 0.0):.1f} dB")
+            card_v5.metric("Stability Index", f"{v_feats.get('voice_stability_index', 0.0):.1f} / 100")
+        except Exception as e:
+            st.warning(f"Could not parse voice audio recording: {e}")
+    else:
+        st.info("ℹ️ No phonation audio file loaded for this selection. For cohort patients, select a participant with voice recordings or upload a custom WAV file.")
 
 
 # ==========================================================
@@ -2067,7 +2089,14 @@ elif menu == "🩺 Machine Learning":
 
     with col_meta:
         if voice_file is not None:
-            v_desc = getattr(voice_file, 'name', os.path.basename(str(voice_file)))
+            if hasattr(voice_file, 'name'):
+                v_desc = voice_file.name
+            else:
+                bname = os.path.basename(str(voice_file))
+                if any(k in bname.lower() for k in ['mahbuba', 'shohan', 'shirina', 'saleha', 'zannatul', 'hira', 'harun', 'nijhum', 'soheli', 'users', 'appdata']):
+                    v_desc = f"{selected_pid}_phonation.wav"
+                else:
+                    v_desc = bname
             st.markdown(f'<div style="font-size:0.8rem; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; padding:6px 10px; border-radius:6px; margin-top:8px;">🎙️ <b>Phonation Audio:</b> Attached ({v_desc})</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div style="font-size:0.8rem; color:#64748b; background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; margin-top:8px;">🎙️ <b>Phonation Audio:</b> Default baseline vector</div>', unsafe_allow_html=True)

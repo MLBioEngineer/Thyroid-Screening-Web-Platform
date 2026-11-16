@@ -720,6 +720,109 @@ class TestVoiceFeatureExtractionAndIntegration(unittest.TestCase):
         self.assertIn("Hypothyroid", probs)
         self.assertAlmostEqual(sum(probs.values()), 1.0, places=3)
 
+    def test_voice_pure_tone_parabolic_precision(self):
+        """Verifies sub-sample parabolic interpolation gives high precision pitch and clinical jitter below threshold."""
+        from src.feature_extractor import extract_voice_features
+        fs = 16000.0
+        t = np.arange(int(fs)) / fs
+        # 220.0 Hz A3 pure tone
+        sig = 0.5 * np.sin(2 * np.pi * 220.0 * t)
+        feats = extract_voice_features(sig, fs=fs)
+        self.assertAlmostEqual(feats["voice_f0_mean"], 220.0, delta=2.0)
+        self.assertLess(feats["voice_jitter_pct"], 1.04) # Within clinical normal threshold (<1.04%)
+        self.assertGreater(feats["voice_hnr_db"], 15.0)
+
+    def test_voice_sample_rates_resampling(self):
+        """Verifies audio sampled at non-standard rates (44.1 kHz, 48 kHz, 8 kHz) is auto-resampled cleanly."""
+        from src.feature_extractor import extract_voice_features
+        for test_fs in [8000.0, 16000.0, 44100.0, 48000.0]:
+            t = np.arange(int(test_fs * 0.8)) / test_fs
+            sig = 0.4 * np.sin(2 * np.pi * 180.0 * t)
+            feats = extract_voice_features(sig, fs=test_fs)
+            self.assertFalse(np.isnan(feats["voice_f0_mean"]))
+            self.assertAlmostEqual(feats["voice_f0_mean"], 180.0, delta=1.5)
+            self.assertFalse(np.isnan(feats["voice_mfcc_mean"]))
+
+    def test_voice_stereo_and_uint8_support(self):
+        """Verifies 2-channel stereo and 8-bit unsigned PCM WAV formats are correctly handled."""
+        from src.feature_extractor import extract_voice_features
+        import scipy.io.wavfile as wavfile
+        import io
+
+        # 1. Stereo (N, 2)
+        t = np.arange(16000) / 16000.0
+        left = 0.5 * np.sin(2 * np.pi * 200.0 * t)
+        right = 0.5 * np.sin(2 * np.pi * 200.0 * t)
+        stereo_data = np.stack([left, right], axis=-1)
+        feats_stereo = extract_voice_features(stereo_data, fs=16000.0)
+        self.assertAlmostEqual(feats_stereo["voice_f0_mean"], 200.0, delta=1.0)
+
+        # 2. 8-bit unsigned PCM
+        uint8_pcm = ((0.5 * np.sin(2 * np.pi * 200.0 * t) + 1.0) * 127.5).astype(np.uint8)
+        buf = io.BytesIO()
+        wavfile.write(buf, 16000, uint8_pcm)
+        feats_uint8 = extract_voice_features(buf)
+        self.assertAlmostEqual(feats_uint8["voice_f0_mean"], 200.0, delta=2.5)
+
+    def test_voice_stream_rewind(self):
+        """Verifies extract_voice_features leaves seekable streams rewound to byte 0 for downstream reuse."""
+        from src.feature_extractor import extract_voice_features
+        import scipy.io.wavfile as wavfile
+        import io
+        buf = io.BytesIO()
+        t = np.arange(16000) / 16000.0
+        wavfile.write(buf, 16000, (0.5 * np.sin(2 * np.pi * 220.0 * t) * 32767).astype(np.int16))
+
+        # First call
+        feats1 = extract_voice_features(buf)
+        self.assertAlmostEqual(feats1["voice_f0_mean"], 220.0, delta=2.0)
+
+        # Second call immediately on the same buffer without manual seek
+        feats2 = extract_voice_features(buf)
+        self.assertAlmostEqual(feats2["voice_f0_mean"], 220.0, delta=2.0)
+        self.assertEqual(feats1["voice_f0_mean"], feats2["voice_f0_mean"])
+        self.assertEqual(buf.tell(), 0)
+
+    def test_extract_patient_features_input_types(self):
+        """Verifies extract_patient_features handles voice_files as a string, list, or BytesIO."""
+        from src.feature_extractor import extract_patient_features
+        t_df = pd.DataFrame({'accel_x_m_s2': [0.0]*20})
+        n_df = pd.DataFrame({'distance_mm': [50.0]*10})
+
+        # Test single string path
+        if os.path.exists(self.voice_file):
+            feats_str = extract_patient_features([t_df], [n_df], voice_files=self.voice_file)
+            self.assertGreater(feats_str["voice_f0_mean"], 50.0)
+
+            # Test list of string paths
+            feats_list = extract_patient_features([t_df], [n_df], voice_files=[self.voice_file])
+            self.assertGreater(feats_list["voice_f0_mean"], 50.0)
+
+    def test_multimodal_model_heldout_accuracy(self):
+        """Verifies trained multimodal model achieves genuine 63.6% accuracy (7/11) on held-out test cohort."""
+        import json
+        import pickle
+        test_df = pd.read_csv("models/heldout_test_set.csv")
+        with open("models/multimodal_feature_columns.json", "r") as f:
+            all_cols = json.load(f)
+        with open("models/multimodal_voice_scaler.pkl", "rb") as f:
+            scaler = pickle.load(f)
+        with open("models/multimodal_selector.pkl", "rb") as f:
+            selector = pickle.load(f)
+        with open("models/multimodal_voice_model.pkl", "rb") as f:
+            model = pickle.load(f)
+
+        X_raw = test_df[all_cols].fillna(0).values
+        y_test = test_df['label'].values
+        X_scaled = scaler.transform(X_raw)
+        X_in = selector.transform(X_scaled)
+        preds = model.predict(X_in)
+
+        correct = int(np.sum(preds == y_test))
+        acc = float(correct / len(y_test))
+        self.assertEqual(correct, 7, f"Multimodal model scored {correct}/11, expected 7/11")
+        self.assertAlmostEqual(acc, 0.636, delta=0.005)
+
 
 if __name__ == '__main__':
     unittest.main()

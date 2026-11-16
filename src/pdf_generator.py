@@ -351,7 +351,7 @@ def generate_patient_pdf(
             Paragraph("<b>Clinical Reference Standard</b>", body_bold)
         ],
         [
-            Paragraph("Fundamental Phonation Pitch (F0)", body_style),
+            Paragraph("Fundamental Phonation Pitch (F<sub>0</sub>)", body_style),
             Paragraph("Autocorrelation Peak Picking (16 kHz)", small_style),
             Paragraph(f0_text, body_bold),
             Paragraph("85–255 Hz typical adult vocal pitch", small_style)
